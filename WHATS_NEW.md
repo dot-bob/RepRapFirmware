@@ -1,6 +1,42 @@
 Summary of important changes in recent versions
 ===============================================
 
+Version 1.21RC1
+=================
+Upgrade notes:
+- The recommended version of DuetWiFiServer is 1.21RC1. DuetWiFiServer 1.20 is also compatible with this release.
+- DuetWebControl 1.20 is compatible with this release
+- See upgrade notes for version 1.20
+
+New features:
+- Added support for nonlinear extruder drives (M592)
+- Added support for Duet3D laser filament monitor
+- Added support for M260 and M261 (send/receive I2C)
+- Added support for workspace coordinates (G10 L2, G53 to G59.3)
+- Added absolute babystepping mode in M290 command
+- Added multi-touch Z probing (M558 A and S parameters)
+- Added M39 command to return SD card free space and other SD card information
+- M591 D# response now includes the measured steps/mm and tolerance
+- Support endstops 5-9 when no DueX board is present
+- Show Duet board revision as 1.02+ if we detect it
+- Recognise Ideamaker generated-by string
+- Cache is now disabled on the ATSAM4E
+- Ported DHCP changes from LWIP 2 to Duet 06/085 build
+
+Bug fixes:
+- When a simulated print ends or is cancelled, stop.g, sleep.g and cancel.g are no longer run
+- Fixed a 1-step error in the commanded extrusion amount that the filament sensor compares with the measured extrusion
+- Filament monitors are now disabled when simulating a print
+- Fixed step number calculation bug that caused benign step error reports with some values of pressure advance
+- Fixed a lookahead bug that caused occasional step errors. Print quality and speed may have been affected.
+- If no temperature sensor is configured for a heater. M305 Pn with no other parameters no longer allocates a thermistor
+- Fixed "listen failed" error after repeated use of FTP
+- Fixed M304
+- Fixed crash when an attempt was made to configure a filament monitor on a DueX endstop input
+- Fixed jerky curves when pressure advance is used and the slicer doesn't command a uniform extrusion rate
+- Fixed missing newline at end of "Done printing file" message (for Pronterface)
+- M350 Enn with only 1 extruder value specified is now applied to all extruder drives
+
 Version 1.20
 ===============
 Upgrade notes:
@@ -15,7 +51,11 @@ Upgrade notes:
 - On a Duet WiFi, if your M552 command in config.g includes a P parameter with an IP address (which was previously ignored), you will need to remove them
 - If you currently have G31 parameters for your active Z probe in config-override.g that are different from the ones in config.g, you should copy them to config.g, otherwise they will be lost next time you run M500.
 - The 'set output on extrude' function (M571) no longer defaults to FAN0 output. If you use this feature, you must define the output pin explicitly using the P parameter at least once.
+- If you are using external drivers and you are not already using the M569 T parameter to extend the minimum step pulse width and interval for them, then you may need to add the T parameter, because efficiency improvements have reduced the minimum width and interval.
 - If you are upgrading from a firmware version prior to 1.19, see also the upgrade notes for firmware 1.19.
+
+Known issues:
+- If you have a Duet3D beta filament monitor configured and you run a print in simulation mode, the filament monitor keeps reporting insufficient extrusion and pausing the print. This issue is also present in earlier releases.
 
 New features - kinematics and motion:
 - Added CoreXYUV kinematics, see M669 command

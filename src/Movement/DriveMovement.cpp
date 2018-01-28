@@ -169,31 +169,66 @@ void DriveMovement::PrepareDeltaAxis(const DDA& dda, const PrepParams& params)
 }
 
 // Prepare this DM for an extruder move
-void DriveMovement::PrepareExtruder(const DDA& dda, const PrepParams& params, bool doCompensation)
+void DriveMovement::PrepareExtruder(const DDA& dda, const PrepParams& params, float speedChange, bool doCompensation)
 {
 	const float dv = dda.directionVector[drive];
-	const float stepsPerMm = reprap.GetPlatform().DriveStepsPerUnit(drive) * fabsf(dv);
+	float stepsPerMm = reprap.GetPlatform().DriveStepsPerUnit(drive) * fabsf(dv);
+	const size_t extruder = drive - reprap.GetGCodes().GetTotalAxes();
+
+#if SUPPORT_NONLINEAR_EXTRUSION
+	if (dda.isPrintingMove)
+	{
+		float a, b, limit;
+		if (reprap.GetPlatform().GetExtrusionCoefficients(extruder, a, b, limit))
+		{
+			const float averageExtrusionSpeed = (dda.totalDistance * dv * DDA::stepClockRate)/dda.clocksNeeded;
+			const float factor = 1.0 + min<float>((averageExtrusionSpeed * a) + (averageExtrusionSpeed * averageExtrusionSpeed * b), limit);
+			stepsPerMm *= factor;
+		}
+	}
+#endif
+
+	float compensationTime;
+	float accelCompensationDistance;
+	int32_t netSteps;
+
+	if (doCompensation && dv > 0.0)
+	{
+		// Calculate the pressure advance parameters
+		compensationTime = reprap.GetPlatform().GetPressureAdvance(extruder);
+		mp.cart.compensationClocks = roundU32(compensationTime * (float)DDA::stepClockRate);
+		mp.cart.accelCompensationClocks = roundU32(compensationTime * (float)DDA::stepClockRate * params.compFactor);
+
+#ifdef COMPENSATE_SPEED_CHANGES
+		// If there is a speed change at the start of the move, theoretically we should instantly advance or retard the filament by the associated compensation amount.
+		// We can't do that, so increase or decrease the extrusion factor instead, so that at least the extrusion will be correct by the end of the move.
+		const float factor = 1.0 + (speedChange * compensationTime)/dda.totalDistance;
+		stepsPerMm *= factor;
+#endif
+		// Recalculate the net total step count to allow for compensation. It may be negative.
+		const float compensationDistance = (dda.endSpeed - dda.startSpeed) * compensationTime;
+		netSteps = (int32_t)((dda.totalDistance + compensationDistance) * stepsPerMm);
+
+		// Calculate the acceleration phase parameters
+		accelCompensationDistance = compensationTime * (dda.topSpeed - dda.startSpeed);
+		mp.cart.accelStopStep = (uint32_t)((dda.accelDistance + accelCompensationDistance) * stepsPerMm) + 1;
+	}
+	else
+	{
+		accelCompensationDistance = compensationTime = 0.0;
+		mp.cart.compensationClocks = mp.cart.accelCompensationClocks = 0;
+		netSteps = (int32_t)(dda.totalDistance * stepsPerMm);		// it may have changed from totalSteps if we are using nonlinear extrusion
+
+		// Calculate the acceleration phase parameters
+		mp.cart.accelStopStep = (uint32_t)(dda.accelDistance * stepsPerMm) + 1;
+	}
+
 	mp.cart.twoCsquaredTimesMmPerStepDivA = roundU64((double)(DDA::stepClockRateSquared * 2)/((double)stepsPerMm * (double)dda.acceleration));
-
-	// Calculate the pressure advance parameter
-	const float compensationTime = (doCompensation && dv > 0.0) ? reprap.GetPlatform().GetPressureAdvance(drive - reprap.GetGCodes().GetTotalAxes()) : 0.0;
-	mp.cart.compensationClocks = roundU32(compensationTime * (float)DDA::stepClockRate);
-	mp.cart.accelCompensationClocks = roundU32(compensationTime * (float)DDA::stepClockRate * params.compFactor);
-
-	// Calculate the net total step count to allow for compensation. It may be negative.
-	const float compensationDistance = (dda.endSpeed - dda.startSpeed) * compensationTime;
-	const int32_t netSteps = (int32_t)(compensationDistance * stepsPerMm) + (int32_t)totalSteps;
-
-	// Calculate the acceleration phase parameters
-	const float accelCompensationDistance = compensationTime * (dda.topSpeed - dda.startSpeed);
-
-	// Acceleration phase parameters
-	mp.cart.accelStopStep = (uint32_t)((dda.accelDistance + accelCompensationDistance) * stepsPerMm) + 1;
 
 	// Constant speed phase parameters
 	mp.cart.mmPerStepTimesCKdivtopSpeed = (uint32_t)((float)((uint64_t)DDA::stepClockRate * K1)/(stepsPerMm * dda.topSpeed));
 
-	// Calculate the deceleration and reverse phase parameters
+	// Calculate the deceleration and reverse phase parameters and update totalSteps
 	// First check whether there is any deceleration at all, otherwise we may get strange results because of rounding errors
 	if (dda.decelDistance * stepsPerMm < 0.5)		// if less than 1 deceleration step
 	{
@@ -210,39 +245,28 @@ void DriveMovement::PrepareExtruder(const DDA& dda, const PrepParams& params, bo
 		twoDistanceToStopTimesCsquaredDivA =
 			initialDecelSpeedTimesCdivASquared + roundU64(((params.decelStartDistance + accelCompensationDistance) * (float)(DDA::stepClockRateSquared * 2))/dda.acceleration);
 
-		// Calculate the move distance to the point of zero speed, where reverse motion starts
-		const float initialDecelSpeed = dda.topSpeed - dda.acceleration * compensationTime;
-		const float reverseStartDistance = (initialDecelSpeed > 0.0)
-												? fsquare(initialDecelSpeed)/(2 * dda.acceleration) + params.decelStartDistance
-												: params.decelStartDistance;
-		// Reverse phase parameters
-		if (reverseStartDistance >= dda.totalDistance)
+		// See whether there is a reverse phase
+		const float compensationSpeedChange = dda.acceleration * compensationTime;
+		const uint32_t stepsBeforeReverse = (compensationSpeedChange > dda.topSpeed)
+											? mp.cart.decelStartStep - 1
+											: twoDistanceToStopTimesCsquaredDivA/mp.cart.twoCsquaredTimesMmPerStepDivA;
+		if (dda.endSpeed < compensationSpeedChange && (int32_t)stepsBeforeReverse > netSteps)
 		{
-			// No reverse phase
-			totalSteps = (uint32_t)max<int32_t>(netSteps, 0);
-			reverseStartStep = netSteps + 1;
-			mp.cart.fourMaxStepDistanceMinusTwoDistanceToStopTimesCsquaredDivA = 0;
+			reverseStartStep = stepsBeforeReverse + 1;
+			totalSteps = (uint32_t)((int32_t)(2 * stepsBeforeReverse) - netSteps);
+			mp.cart.fourMaxStepDistanceMinusTwoDistanceToStopTimesCsquaredDivA =
+					(int64_t)((2 * stepsBeforeReverse) * mp.cart.twoCsquaredTimesMmPerStepDivA) - (int64_t)twoDistanceToStopTimesCsquaredDivA;
 		}
 		else
 		{
-			reverseStartStep = (initialDecelSpeed < 0.0)
-								? mp.cart.decelStartStep
-								: (twoDistanceToStopTimesCsquaredDivA/mp.cart.twoCsquaredTimesMmPerStepDivA) + 1;
-			// Because the step numbers are rounded down, we may sometimes get a situation in which netSteps = 1 and reverseStartStep = 1.
-			// This would lead to totalSteps = -1, which must be avoided.
-			const int32_t overallSteps = (int32_t)(2 * (reverseStartStep - 1)) - netSteps;
-			if (overallSteps > 0)
+			// There is no reverse phase. Check that we can actually do the last step requested.
+			if (netSteps > (int32_t)stepsBeforeReverse)
 			{
-				totalSteps = (uint32_t)overallSteps;
-				mp.cart.fourMaxStepDistanceMinusTwoDistanceToStopTimesCsquaredDivA =
-						(int64_t)((2 * (reverseStartStep - 1)) * mp.cart.twoCsquaredTimesMmPerStepDivA) - (int64_t)twoDistanceToStopTimesCsquaredDivA;
+				netSteps = (int32_t)stepsBeforeReverse;
 			}
-			else
-			{
-				totalSteps = (uint32_t)max<int32_t>(netSteps, 0);
-				reverseStartStep = totalSteps + 1;
-				mp.cart.fourMaxStepDistanceMinusTwoDistanceToStopTimesCsquaredDivA = 0;
-			}
+			reverseStartStep = netSteps + 1;
+			totalSteps = (uint32_t)max<int32_t>(netSteps, 0);
+			mp.cart.fourMaxStepDistanceMinusTwoDistanceToStopTimesCsquaredDivA = 0;
 		}
 	}
 }
@@ -290,10 +314,10 @@ pre(nextStep < totalSteps; stepsTillRecalc == 0)
 	uint32_t shiftFactor = 0;		// assume single stepping
 	if (stepInterval < DDA::MinCalcIntervalCartesian)
 	{
-		uint32_t stepsToLimit = ((nextStep <= reverseStartStep && reverseStartStep <= totalSteps)
-									? reverseStartStep
-									: totalSteps
-								) - nextStep;
+		const uint32_t stepsToLimit = ((nextStep <= reverseStartStep && reverseStartStep <= totalSteps)
+										? reverseStartStep
+										: totalSteps
+									  ) - nextStep;
 		if (stepInterval < DDA::MinCalcIntervalCartesian/4 && stepsToLimit > 8)
 		{
 			shiftFactor = 3;		// octal stepping

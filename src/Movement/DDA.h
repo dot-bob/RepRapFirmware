@@ -74,8 +74,9 @@ public:
 	void LimitSpeedAndAcceleration(float maxSpeed, float maxAcceleration);	// Limit the speed an acceleration of this move
 
 	int32_t GetStepsTaken(size_t drive) const;
+	bool IsNonPrintingExtruderMove(size_t drive) const;
 
-	float GetProportionDone(bool moveWasAborted) const;				// Return the proportion of extrusion for the complete multi-segment move already done
+	float GetProportionDone(bool moveWasAborted) const;						// Return the proportion of extrusion for the complete multi-segment move already done
 
 	void MoveAborted();
 
@@ -91,7 +92,8 @@ public:
 	uint32_t GetStepInterval(size_t axis, uint32_t microstepShift) const;	// Get the current full step interval for this axis or extruder
 #endif
 
-	void DebugPrint() const;
+	void DebugPrint() const;												// print the DDA only
+	void DebugPrintAll() const;												// print the DDA and active DMs
 
 	static constexpr uint32_t stepClockRate = VARIANT_MCK/128;				// the frequency of the clock used for stepper pulse timing (see Platform::InitialiseInterrupts)
 	static constexpr uint64_t stepClockRateSquared = (uint64_t)stepClockRate * stepClockRate;
@@ -104,17 +106,17 @@ public:
 	// Note: the above measurements were taken some time ago, before some firmware optimisations.
 #if SAME70
 	// The system clock of the SAME70 is running at 150MHz. Use the same defaults as for the SAM4E for now.
-	static constexpr int32_t MinCalcIntervalDelta = (40 * stepClockRate)/1000000; 		// the smallest sensible interval between calculations (40us) in step timer clocks
-	static constexpr int32_t MinCalcIntervalCartesian = (40 * stepClockRate)/1000000;	// same as delta for now, but could be lower
-	static constexpr uint32_t minInterruptInterval = 6;									// about 6us minimum interval between interrupts, in step clocks
+	static constexpr uint32_t MinCalcIntervalDelta = (40 * stepClockRate)/1000000; 		// the smallest sensible interval between calculations (40us) in step timer clocks
+	static constexpr uint32_t MinCalcIntervalCartesian = (40 * stepClockRate)/1000000;	// same as delta for now, but could be lower
+	static constexpr uint32_t MinInterruptInterval = 6;									// about 6us minimum interval between interrupts, in step clocks
 #elif SAM4E || SAM4S
-	static constexpr int32_t MinCalcIntervalDelta = (40 * stepClockRate)/1000000; 		// the smallest sensible interval between calculations (40us) in step timer clocks
-	static constexpr int32_t MinCalcIntervalCartesian = (40 * stepClockRate)/1000000;	// same as delta for now, but could be lower
-	static constexpr uint32_t minInterruptInterval = 6;									// about 6us minimum interval between interrupts, in step clocks
+	static constexpr uint32_t MinCalcIntervalDelta = (40 * stepClockRate)/1000000; 		// the smallest sensible interval between calculations (40us) in step timer clocks
+	static constexpr uint32_t MinCalcIntervalCartesian = (40 * stepClockRate)/1000000;	// same as delta for now, but could be lower
+	static constexpr uint32_t MinInterruptInterval = 6;									// about 6us minimum interval between interrupts, in step clocks
 #else
-	static constexpr int32_t MinCalcIntervalDelta = (60 * stepClockRate)/1000000; 		// the smallest sensible interval between calculations (60us) in step timer clocks
-	static constexpr int32_t MinCalcIntervalCartesian = (60 * stepClockRate)/1000000;	// same as delta for now, but could be lower
-	static constexpr uint32_t minInterruptInterval = 4;									// about 6us minimum interval between interrupts, in step clocks
+	static constexpr uint32_t MinCalcIntervalDelta = (60 * stepClockRate)/1000000; 		// the smallest sensible interval between calculations (60us) in step timer clocks
+	static constexpr uint32_t MinCalcIntervalCartesian = (60 * stepClockRate)/1000000;	// same as delta for now, but could be lower
+	static constexpr uint32_t MinInterruptInterval = 4;									// about 6us minimum interval between interrupts, in step clocks
 #endif
 
 	static void PrintMoves();										// print saved moves for debugging
@@ -130,7 +132,7 @@ public:
 private:
 	DriveMovement *FindDM(size_t drive) const;
 	void RecalculateMove() __attribute__ ((hot));
-	void CalcNewSpeeds() __attribute__ ((hot));
+	void MatchSpeeds() __attribute__ ((hot));
 	void ReduceHomingSpeed();										// called to reduce homing speed when a near-endstop is triggered
 	void StopDrive(size_t drive);									// stop movement of a drive and recalculate the endpoint
 	void InsertDM(DriveMovement *dm) __attribute__ ((hot));
@@ -141,7 +143,7 @@ private:
 	void CheckEndstops(Platform& platform);
 	float NormaliseXYZ();											// Make the direction vector unit-normal in XYZ
 
-	static void DoLookahead(DDA *laDDA);							// Try to smooth out moves in the queue
+	static void DoLookahead(DDA *laDDA) __attribute__ ((hot));		// Try to smooth out moves in the queue
     static float Normalise(float v[], size_t dim1, size_t dim2);  	// Normalise a vector of dim1 dimensions to unit length in the first dim1 dimensions
     static void Absolute(float v[], size_t dimensions);				// Put a vector in the positive hyperquadrant
     static float Magnitude(const float v[], size_t dimensions);  	// Return the length of a vector

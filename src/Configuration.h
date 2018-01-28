@@ -200,7 +200,12 @@ constexpr size_t GCODE_LENGTH = 101;					// maximum number of non-comment charac
 constexpr size_t GCODE_REPLY_LENGTH = 2048;
 constexpr size_t MESSAGE_LENGTH = 256;
 
+#if SAM4E || SAM4S || SAME70
+constexpr size_t FILENAME_LENGTH = 120;					// Maximum length of a filename including the path
+#else
 constexpr size_t FILENAME_LENGTH = 100;
+#endif
+
 constexpr size_t MaxHeaterNameLength = 20;				// Maximum number of characters in a heater name
 
 // Output buffer lengths
@@ -231,6 +236,8 @@ constexpr float DefaultArcSegmentLength = 0.2;			// G2 and G3 arc movement comma
 constexpr uint32_t DefaultIdleTimeout = 30000;			// Milliseconds
 constexpr float DefaultIdleCurrentFactor = 0.3;			// Proportion of normal motor current that we use for idle hold
 
+constexpr float DefaultNonlinearExtrusionLimit = 0.2;	// Maximum additional commanded extrusion to compensate for nonlinearity
+
 // Triggers
 constexpr unsigned int MaxTriggers = 10;				// Must be <= 32 because we store a bitmap of pending triggers in a uint32_t
 
@@ -245,12 +252,10 @@ constexpr float DefaultMaxSpindleRpm = 10000;			// Default spindle RPM at full P
 constexpr float DefaultMaxLaserPower = 255.0;			// Power setting in M3 command for full power
 
 // File handling
-
 constexpr size_t MAX_FILES = 10;					// Must be large enough to handle the max number of simultaneous web requests + files being printed
 constexpr size_t FILE_BUFFER_SIZE = 256;
 
 // Webserver stuff
-
 #define DEFAULT_PASSWORD "reprap"					// Default machine password
 #define DEFAULT_NAME "My Duet"						// Default machine name
 #define HOSTNAME "duet"								// Default netbios name
@@ -259,7 +264,6 @@ constexpr size_t FILE_BUFFER_SIZE = 256;
 #define FOUR04_PAGE_FILE "html404.htm"
 
 // Filesystem and upload defaults
-
 #define FS_PREFIX "0:"
 #define WEB_DIR "0:/www/"							// Place to find web files on the SD card
 #define GCODE_DIR "0:/gcodes/"						// Ditto - G-Codes
@@ -274,12 +278,12 @@ constexpr size_t FILE_BUFFER_SIZE = 256;
 
 #define EOF_STRING "<!-- **EoF** -->"
 
-// Firmware update file names are now defined in the Pins file
-
 // List defaults
-
 constexpr char LIST_SEPARATOR = ':';
 constexpr char FILE_LIST_SEPARATOR = ',';
 constexpr char FILE_LIST_BRACKET = '"';
+
+// Misc
+constexpr size_t MaxI2cBytes = 32;
 
 #endif

@@ -125,7 +125,7 @@ public:
 	bool CalcNextStepTimeDelta(const DDA &dda, bool live) __attribute__ ((hot));
 	void PrepareCartesianAxis(const DDA& dda, const PrepParams& params) __attribute__ ((hot));
 	void PrepareDeltaAxis(const DDA& dda, const PrepParams& params) __attribute__ ((hot));
-	void PrepareExtruder(const DDA& dda, const PrepParams& params, bool doCompensation) __attribute__ ((hot));
+	void PrepareExtruder(const DDA& dda, const PrepParams& params, float speedChange, bool doCompensation) __attribute__ ((hot));
 	void ReduceSpeed(const DDA& dda, uint32_t inverseSpeedFactor);
 	void DebugPrint(char c, bool withDelta) const;
 	int32_t GetNetStepsLeft() const;
@@ -286,7 +286,7 @@ inline int32_t DriveMovement::GetNetStepsTaken() const
 	}
 	else
 	{
-		netStepsTaken = (int32_t)nextStep - (int32_t)(2 * reverseStartStep) + 2;	// allowing for direction having changed
+		netStepsTaken = (int32_t)nextStep - (int32_t)(2 * reverseStartStep) + 1;	// allowing for direction having changed
 	}
 	return (direction) ? netStepsTaken : -netStepsTaken;
 }
