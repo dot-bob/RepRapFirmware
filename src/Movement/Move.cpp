@@ -16,12 +16,12 @@ Move::Move() : currentDda(nullptr), active(false), scheduledMoves(0), completedM
 	kinematics = Kinematics::Create(KinematicsType::cartesian);			// default to Cartesian
 
 	// Build the DDA ring
-	DDA *dda = new DDA(nullptr);
+	DDA *dda = new RAM2 DDA(nullptr);
 	ddaRingGetPointer = ddaRingAddPointer = dda;
 	for (size_t i = 1; i < DdaRingLength; i++)
 	{
 		DDA * const oldDda = dda;
-		dda = new DDA(dda);
+		dda = new RAM2 DDA(dda);
 		oldDda->SetPrevious(dda);
 	}
 	ddaRingAddPointer->SetNext(dda);

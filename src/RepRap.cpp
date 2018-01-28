@@ -61,11 +61,11 @@ RepRap::RepRap() : toolList(nullptr), currentTool(nullptr), lastWarningMillis(0)
 	displayMessageBox(false), boxSeq(0)
 {
 	OutputBuffer::Init();
-	platform = new Platform();
-	network = new Network(*platform);
-	gCodes = new GCodes(*platform);
+	platform = new RAM1 Platform();
+	network = new RAM2 Network(*platform);
+	gCodes = new RAM1 GCodes(*platform);
 	move = new Move();
-	heat = new Heat(*platform);
+	heat = new /*RAM2*/ Heat(*platform);
 
 #if SUPPORT_ROLAND
 	roland = new Roland(*platform);
@@ -77,7 +77,7 @@ RepRap::RepRap() : toolList(nullptr), currentTool(nullptr), lastWarningMillis(0)
 	portControl = new PortControl();
 #endif
 
-	printMonitor = new PrintMonitor(*platform, *gCodes);
+	printMonitor = new RAM2 PrintMonitor(*platform, *gCodes);
 
 	SetPassword(DEFAULT_PASSWORD);
 	SetName(DEFAULT_NAME);
@@ -244,8 +244,8 @@ void RepRap::Spin()
 
 	// Keep track of the loop time
 	const uint32_t t = micros();
-	const uint32_t dt = t - lastTime;
-	if (dt < fastLoop)
+    const uint32_t dt = t - lastTime;
+    if (dt < fastLoop)
 	{
 		fastLoop = dt;
 	}
@@ -259,7 +259,7 @@ void RepRap::Spin()
 void RepRap::Timing(MessageType mtype)
 {
 	platform->MessageF(mtype, "Slowest main loop (seconds): %f; fastest: %f\n", (double)(slowLoop * 0.000001), (double)(fastLoop * 0.000001));
-	fastLoop = UINT32_MAX;
+    fastLoop = UINT32_MAX;
 	slowLoop = 0;
 }
 

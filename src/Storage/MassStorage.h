@@ -4,7 +4,11 @@
 #include "RepRapFirmware.h"
 #include "Pins.h"
 #include "FileWriteBuffer.h"
-#include "Libraries/Fatfs/ff.h"
+#ifdef __LPC17xx__
+# include "Libraries/Fatfs_alt/ff.h"
+#else
+# include "Libraries/Fatfs/ff.h"
+#endif
 #include "GCodes/GCodeResult.h"
 #include "FileStore.h"
 #include <ctime>

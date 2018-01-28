@@ -34,8 +34,10 @@
 #include "Logger.h"
 #include "Libraries/Math/Isqrt.h"
 
+#ifndef __LPC17xx__
 #include "sam/drivers/tc/tc.h"
 #include "sam/drivers/hsmci/hsmci.h"
+#endif
 
 #include "sd_mmc.h"
 
@@ -58,6 +60,9 @@ extern "C" char *sbrk(int i);
 
 #if !defined(HAS_LWIP_NETWORKING) || !defined(HAS_WIFI_NETWORKING) || !defined(HAS_CPU_TEMP_SENSOR) || !defined(HAS_HIGH_SPEED_SD) \
  || !defined(HAS_SMART_DRIVERS) || !defined(HAS_STALL_DETECT) || !defined(HAS_VOLTAGE_MONITOR) || !defined(HAS_VREF_MONITOR) || !defined(ACTIVE_LOW_HEAT_ON)
+#elif defined(__LPC17xx__)
+
+#else
 # error Missing feature definition
 #endif
 
@@ -181,8 +186,12 @@ void setup()
 // Definition of RSTC_MR_KEY_PASSWD is missing in the SAM3X ASF files
 # define RSTC_MR_KEY_PASSWD (0xA5u << 24)
 #endif
+    
+#ifndef __LPC17xx__
 	RSTC->RSTC_MR = RSTC_MR_KEY_PASSWD | RSTC_MR_URSTEN;	// ignore any signal on the NRST pin for now so that the reset reason will show as Software
-
+#endif
+    
+    
 #if SAM4E && USE_CACHE
 	// Enable the cache
 	struct cmcc_config g_cmcc_cfg;
@@ -324,14 +333,14 @@ Platform::Platform() :
 		lastFanCheckTime(0), auxGCodeReply(nullptr), tickState(0), debugCode(0), lastWarningMillis(0), deliberateError(false)
 {
 	// Output
-	auxOutput = new OutputStack();
+	auxOutput = new RAM2 OutputStack();
 #ifdef SERIAL_AUX2_DEVICE
 	aux2Output = new OutputStack();
 #endif
-	usbOutput = new OutputStack();
+	usbOutput = new RAM2 OutputStack();
 
 	// Files
-	massStorage = new MassStorage(this);
+	massStorage = new RAM2 MassStorage(this);
 }
 
 //*******************************************************************************************************************
@@ -441,6 +450,11 @@ void Platform::Init()
 	pinMode(SpiEEPROMcsPin,OUTPUT_HIGH);													// Init Spi EEPROM Cs pin, not implemented, default unselected
 	pinMode(SpiFLASHcsPin,OUTPUT_HIGH);														// Init Spi FLASH Cs pin, not implemented, default unselected
 #endif
+    
+#if defined(__LPC17xx__)
+    mcp4451.begin();
+#endif
+
 
 	// DRIVES
 	ARRAY_INIT(endStopPins, END_STOP_PINS);
@@ -474,11 +488,13 @@ void Platform::Init()
 		}
 	}
 
+#ifndef __LPC17xx__
 	// Motors
 	// Disable parallel writes to all pins. We re-enable them for the step pins.
 	PIOA->PIO_OWDR = 0xFFFFFFFF;
 	PIOB->PIO_OWDR = 0xFFFFFFFF;
 	PIOC->PIO_OWDR = 0xFFFFFFFF;
+#endif
 #ifdef PIOD
 	PIOD->PIO_OWDR = 0xFFFFFFFF;
 #endif
@@ -507,9 +523,10 @@ void Platform::Init()
 		pinMode(DIRECTION_PINS[drive], OUTPUT_LOW);
 		pinMode(ENABLE_PINS[drive], OUTPUT_HIGH);				// this is OK for the TMC2660 CS pins too
 
-		const PinDescription& pinDesc = g_APinDescription[STEP_PINS[drive]];
+#ifndef __LPC17xx__
+        const PinDescription& pinDesc = g_APinDescription[STEP_PINS[drive]];
 		pinDesc.pPort->PIO_OWER = pinDesc.ulPin;				// enable parallel writes to the step pins
-
+#endif
 		motorCurrents[drive] = 0.0;
 		motorCurrentFraction[drive] = 1.0;
 #if HAS_SMART_DRIVERS
@@ -527,6 +544,9 @@ void Platform::Init()
 #elif defined(__RADDS__) || defined(__ALLIGATOR__)
 		// I don't know whether RADDS and Alligator have hardware pullup resistors or not. I'll assume they might not.
 		setPullup(endStopPins[drive], true);
+#elif defined(__LPC__)
+       //I think they have hardware pullups.
+        
 #endif
 	}
 
@@ -770,11 +790,13 @@ void Platform::InitZProbe()
 		break;
 
 	case 6:
-		AnalogInEnableChannel(zProbeAdcChannel, false);
-		pinMode(zProbePin, INPUT_PULLUP);
-		pinMode(endStopPins[E0_AXIS + 1], INPUT);
-		pinMode(zProbeModulationPin, OUTPUT_LOW);		// we now set the modulation output high during probing only when using probe types 4 and higher
-		break;
+        if( E0_AXIS+1 < DRIVES ) {//avoid accidental out of bounds on azteeg which doesnt have E1
+            AnalogInEnableChannel(zProbeAdcChannel, false);
+            pinMode(zProbePin, INPUT_PULLUP);
+            pinMode(endStopPins[E0_AXIS + 1], INPUT);
+            pinMode(zProbeModulationPin, OUTPUT_LOW);		// we now set the modulation output high during probing only when using probe types 4 and higher
+        }
+        break;
 
 	case 7:
 		AnalogInEnableChannel(zProbeAdcChannel, false);
@@ -977,6 +999,10 @@ bool Platform::HomingZWithProbe() const
 // Check the prerequisites for updating the main firmware. Return True if satisfied, else print a message to 'reply' and return false.
 bool Platform::CheckFirmwareUpdatePrerequisites(StringRef& reply)
 {
+    
+#ifndef NO_FIRMWARE_UPDATE
+
+    
 	FileStore * const firmwareFile = OpenFile(GetSysDir(), IAP_FIRMWARE_FILE, OpenMode::read);
 	if (firmwareFile == nullptr)
 	{
@@ -1005,13 +1031,21 @@ bool Platform::CheckFirmwareUpdatePrerequisites(StringRef& reply)
 		reply.printf("In-application programming binary \"%s\" not found", IAP_UPDATE_FILE);
 		return false;
 	}
-
+#endif //NO_FIRMWARE_UPDATE
 	return true;
 }
 
 // Update the firmware. Prerequisites should be checked before calling this.
 void Platform::UpdateFirmware()
 {
+#if defined(NO_FIRMWARE_UPDATE)
+    
+    //TODO:: updating firmware just copy to SDCARD to /firmware.bin and reboot if using default smoothie bootloader
+    
+    
+#else
+
+    
 	FileStore * const iapFile = OpenFile(GetSysDir(), IAP_UPDATE_FILE, OpenMode::read);
 	if (iapFile == nullptr)
 	{
@@ -1214,6 +1248,8 @@ void Platform::UpdateFirmware()
 	__asm volatile ("ldr r1, [r3, #4]");
 	__asm volatile ("orr r1, r1, #1");
 	__asm volatile ("bx r1");
+    
+#endif //
 }
 
 // Send the beep command to the aux channel. There is no flow control on this port, so it can't block for long.
@@ -1801,6 +1837,10 @@ float Platform::AdcReadingToCpuTemperature(uint32_t adcVal) const
 // Perform a software reset. 'stk' points to the program counter on the stack if the cause is an exception, otherwise it is nullptr.
 void Platform::SoftwareReset(uint16_t reason, const uint32_t *stk)
 {
+    
+#ifndef NO_SOFTWARE_RESET_DATA
+
+    
 	cpu_irq_disable();							// disable interrupts before we call any flash functions. We don't enable them again.
 	wdt_restart(WDT);							// kick the watchdog
 
@@ -1898,8 +1938,11 @@ void Platform::SoftwareReset(uint16_t reason, const uint32_t *stk)
 	}
 
 	RSTC->RSTC_MR = RSTC_MR_KEY_PASSWD;			// ignore any signal on the NRST pin for now so that the reset reason will show as Software
-	Reset();
-	for(;;) {}
+#endif //NO_SOFTWARE_RESET_DATA
+
+    Reset();
+    for(;;) {}
+
 }
 
 //*****************************************************************************************************************
@@ -1929,14 +1972,14 @@ static void FanInterrupt(CallbackParameter)
 
 void Platform::InitialiseInterrupts()
 {
-#if SAM4E || SAM7E
+#if SAM4E || SAM7E || __LPC17xx__
 	NVIC_SetPriority(WDT_IRQn, NvicPriorityWatchdog);			// set priority for watchdog interrupts
 #endif
 
 	// Set the tick interrupt to the highest priority. We need to to monitor the heaters and kick the watchdog.
 	NVIC_SetPriority(SysTick_IRQn, NvicPrioritySystick);		// set priority for tick interrupts
 
-#if SAM4E || SAM4S || SAME70
+#if SAM4E || SAM4S || SAME70  || __LPC17xx__
 	NVIC_SetPriority(UART0_IRQn, NvicPriorityPanelDueUart);		// set priority for UART interrupt
 	NVIC_SetPriority(UART1_IRQn, NvicPriorityWiFiUart);			// set priority for WiFi UART interrupt
 #else
@@ -1953,6 +1996,20 @@ void Platform::InitialiseInterrupts()
 	// 1.524us resolution on the Duet 085 (84MHz clock)
 	// 1.067us resolution on the Duet WiFi (120MHz clock)
 	// 0.853us resolution on the SAM E70 (150MHz clock)
+#if __LPC17xx__
+
+    static const uint32_t res = 1200000;//Resolution for interrupt: 1.2us
+    //Start a free running Timer using Match Registers 0 and 1 to generate interrupts
+    LPC_SC->PCONP |= ((uint32_t)1<<SBIT_PCTIM0); // Ensure the Power bit is set for the Timer
+    STEP_TC->MCR = 0; //disable all MRx interrupts
+    //STEP_TC->PR   = getPrescalarForUs(PCLK_TIMER0); // Prescalar for ~1us
+    STEP_TC->PR  = getPclk(PCLK_TIMER0)/res - 1;
+    STEP_TC->TC  = 0x00;  // Restart the Timer Count
+    NVIC_SetPriority(STEP_TC_IRQN, NvicPriorityStep);        // set high priority for this IRQ; it's time-critical
+    NVIC_EnableIRQ(STEP_TC_IRQN);
+    STEP_TC->TCR  = (1 <<SBIT_CNTEN); //Start Timer
+    
+#else
 	pmc_set_writeprotect(false);
 	pmc_enable_periph_clk((uint32_t) STEP_TC_IRQN);
 	tc_init(STEP_TC, STEP_TC_CHAN, TC_CMR_WAVE | TC_CMR_WAVSEL_UP | TC_CMR_TCCLKS_TIMER_CLOCK4 | TC_CMR_EEVT_XC0);	// must set TC_CMR_EEVT nonzero to get RB compare interrupts
@@ -1961,7 +2018,9 @@ void Platform::InitialiseInterrupts()
 	tc_get_status(STEP_TC, STEP_TC_CHAN);					// clear any pending interrupt
 	NVIC_SetPriority(STEP_TC_IRQN, NvicPriorityStep);		// set high priority for this IRQ; it's time-critical
 	NVIC_EnableIRQ(STEP_TC_IRQN);
+#endif
 
+    
 #if HAS_LWIP_NETWORKING
 	pmc_enable_periph_clk((uint32_t) NETWORK_TC_IRQN);
 # if SAME70
@@ -1988,10 +2047,17 @@ void Platform::InitialiseInterrupts()
 	NVIC_SetPriority(EMAC_IRQn, NvicPriorityEthernet);
 # endif
 #endif
-
+    
+    
+#if __LPC17xx__
+    //SD: Int for GPIO pins on port 0 and 2 share EINT3
+    NVIC_SetPriority(EINT3_IRQn, NvicPriorityPins);
+#else
 	NVIC_SetPriority(PIOA_IRQn, NvicPriorityPins);
 	NVIC_SetPriority(PIOB_IRQn, NvicPriorityPins);
 	NVIC_SetPriority(PIOC_IRQn, NvicPriorityPins);
+#endif
+    
 #ifdef ID_PIOD
 	NVIC_SetPriority(PIOD_IRQn, NvicPriorityPins);
 #endif
@@ -2005,13 +2071,22 @@ void Platform::InitialiseInterrupts()
 	NVIC_SetPriority(UDP_IRQn, NvicPriorityUSB);
 #elif SAM3XA
 	NVIC_SetPriority(UOTGHS_IRQn, NvicPriorityUSB);
+#elif __LPC17xx__
+    NVIC_SetPriority(USB_IRQn, NvicPriorityUSB);
 #else
 # error
 #endif
 
-#if !SAME70
+    
+#if __LPC17xx__
+    NVIC_SetPriority(I2C0_IRQn, NvicPriorityTwi);
+    NVIC_SetPriority(I2C1_IRQn, NvicPriorityTwi);
+#else
+# if !SAME70
 	NVIC_SetPriority(TWI1_IRQn, NvicPriorityTwi);
+# endif
 #endif
+    
 
 	// Interrupt for 4-pin PWM fan sense line
 	if (coolingFanRpmPin != NoPin)
@@ -2024,10 +2099,15 @@ void Platform::InitialiseInterrupts()
 	currentFilterNumber = 0;
 
 	// Set up the timeout of the regulator watchdog, and set up the backup watchdog if there is one
-	// The clock frequency for both watchdogs is 32768/128 = 256Hz
+#if __LPC17xx__
+    wdt_init(1); // reset the processor on a watchdog fault
+
+#else
+    // The clock frequency for both watchdogs is 32768/128 = 256Hz
 	const uint16_t timeout = 32768/128;												// set watchdog timeout to 1 second (max allowed value is 4095 = 16 seconds)
 	wdt_init(WDT, WDT_MR_WDRSTEN, timeout, timeout);								// reset the processor on a watchdog fault
-
+#endif
+    
 #if SAM4E || SAME70
 	// The RSWDT must be initialised *after* the main WDT
 	const uint16_t rsTimeout = 16384/128;											// set secondary watchdog timeout to 0.5 second (max allowed value is 4095 = 16 seconds)
@@ -2129,7 +2209,6 @@ void Platform::Diagnostics(MessageType mtype)
 
 	// Print the firmware version and board type
 	MessageF(mtype, "%s version %s running on %s", FIRMWARE_NAME, VERSION, GetElectronicsString());
-
 #ifdef DUET_NG
 	const char* const expansionName = DuetExpansion::GetExpansionBoardName();
 	if (expansionName != nullptr)
@@ -2139,6 +2218,7 @@ void Platform::Diagnostics(MessageType mtype)
 #endif
 
 	Message(mtype, "\n");
+    MessageF(mtype, "CPU Clock Speed (MHz): %f\n", (double) (SystemCoreClock * 0.000001));
 
 #if SAM4E || SAM4S || SAME70
 	PrintUniqueId(mtype);
@@ -2152,6 +2232,8 @@ void Platform::Diagnostics(MessageType mtype)
 			(char *) 0x20000000;
 #elif SAM3XA
 			(char *) 0x20070000;
+#elif __LPC17xx__
+            (char *) 0x10000000;
 #else
 # error
 #endif
@@ -2164,6 +2246,42 @@ void Platform::Diagnostics(MessageType mtype)
 	MessageF(mtype, "Stack ram used: %" PRIu32 " current, %" PRIu32 " maximum\n", currentStack, maxStack);
 	MessageF(mtype, "Never used ram: %" PRIu32 "\n", neverUsed);
 
+#ifdef __LPC17xx__
+    //Read memory from AHB0 and 1
+    //extern unsigned int Image$$RW_IRAM1$$Base;
+    //extern unsigned int Image$$RW_IRAM1$$ZI$$Limit;
+    extern unsigned int Image$$RW_IRAM2$$Base;
+    extern unsigned int Image$$RW_IRAM2$$ZI$$Limit;
+    extern unsigned int Image$$RW_IRAM3$$Base;
+    extern unsigned int Image$$RW_IRAM3$$ZI$$Limit;
+    
+    MessageF(mtype, "AHB0 Static ram used: %d\n", (unsigned int)&Image$$RW_IRAM2$$ZI$$Limit -(unsigned int)&Image$$RW_IRAM2$$Base);
+    MessageF(mtype, "AHB1 Static ram used: %d\n", (unsigned int)&Image$$RW_IRAM3$$ZI$$Limit -(unsigned int)&Image$$RW_IRAM3$$Base);
+    
+    uint32_t ahb0_static = (unsigned int)&Image$$RW_IRAM2$$ZI$$Limit -(unsigned int)&Image$$RW_IRAM2$$Base;
+    uint32_t ahb1_static = (unsigned int)&Image$$RW_IRAM3$$ZI$$Limit -(unsigned int)&Image$$RW_IRAM3$$Base;
+    //Dynamic Memory (free and total available)
+    uint32_t ahb0_total = 0;
+    uint32_t ahb0_free = 0 ;
+    uint32_t ahb1_total = 0;
+    uint32_t ahb1_free = 0 ;
+    
+    AHB0.debug(ahb0_total, ahb0_free);
+    AHB1.debug(ahb1_total, ahb1_free);
+    
+    MessageF(mtype, "AHB0 Dynamic ram used: %d/%d\n", (unsigned int)(ahb0_total-ahb0_free), (unsigned int)ahb0_total);
+    MessageF(mtype, "AHB1 Dynamic ram used: %d/%d\n", (unsigned int)(ahb1_total-ahb1_free), (unsigned int)ahb1_total);
+    
+    uint32_t main_usage = (&_end - ramstart)+mi.uordblks+currentStack;// Static + dynamic + stack
+    MessageF(mtype, "-- RAM Totals --\n");
+    MessageF(mtype, "Main RAM: %d/%d (%d free)\n", (unsigned int)(&_end - ramstart)+mi.uordblks+currentStack, 32*1024, (unsigned int)(32*1024 - main_usage));
+    MessageF(mtype, "AHB0 RAM: %d/%d (%d free)\n", (unsigned int)(ahb0_total-ahb0_free+ahb0_static), (unsigned int)ahb0_total+ahb0_static, (unsigned int)ahb0_free);
+    MessageF(mtype, "AHB1 RAM: %d/%d (%d free)\n", (unsigned int)(ahb1_total-ahb1_free+ahb1_static), (unsigned int)ahb1_total+ahb1_static, (unsigned int)ahb1_free);
+
+
+#endif
+    
+    
 	// Show the up time and reason for the last reset
 	const uint32_t now = (uint32_t)(millis64()/1000u);		// get up time in seconds
 	const char* resetReasons[8] = { "power up", "backup", "watchdog", "software",
@@ -2174,7 +2292,10 @@ void Platform::Diagnostics(MessageType mtype)
 									"reset button",
 #endif
 									"?", "?", "?" };
-	MessageF(mtype, "Last reset %02d:%02d:%02d ago, cause: %s\n",
+
+#ifndef NO_SOFTWARE_RESET_DATA
+
+    MessageF(mtype, "Last reset %02d:%02d:%02d ago, cause: %s\n",
 			(unsigned int)(now/3600), (unsigned int)((now % 3600)/60), (unsigned int)(now % 60),
 			resetReasons[(REG_RSTC_SR & RSTC_SR_RSTTYP_Msk) >> RSTC_SR_RSTTYP_Pos]);
 
@@ -2251,6 +2372,7 @@ void Platform::Diagnostics(MessageType mtype)
 			Message(mtype, "Last software reset details not available\n");
 		}
 	}
+#endif //NO_SOFTWARE_RESET_DATA
 
 	// Show the current error codes
 	MessageF(mtype, "Error status: %" PRIu32 "\n", errorCodeBits);
@@ -2338,8 +2460,28 @@ void Platform::Diagnostics(MessageType mtype)
 
 #ifdef SOFT_TIMER_DEBUG
 	MessageF(mtype, "Soft timer interrupts executed %u, next %u scheduled at %u, now %u\n",
-		numSoftTimerInterruptsExecuted, STEP_TC->TC_CHANNEL[STEP_TC_CHAN].TC_RB, lastSoftTimerInterruptScheduledAt, GetInterruptClocks());
+		numSoftTimerInterruptsExecuted,
+# ifdef __LPC17xx__
+             STEP_TC->MR1,
+# else
+             STEP_TC->TC_CHANNEL[STEP_TC_CHAN].TC_RB,
+# endif
+        lastSoftTimerInterruptScheduledAt, GetInterruptClocks());
 #endif
+    
+    
+
+    //Print out our Special Pins Available:
+    MessageF(mtype, "GPIO Special Pins available (i.e. with M42)\n LogicalPin - PhysicalPin\n");
+    for(size_t i=0; i<ARRAY_SIZE(SpecialPinMap); i++){
+        uint8_t portNumber =  (SpecialPinMap[i]>>5);  //Divide the pin number by 32 go get the PORT number
+        uint8_t pinNumber  =   SpecialPinMap[i] & 0x1f;  //lower 5-bits contains the bit number of a 32bit port
+
+        MessageF(mtype, "%d - P%d_%d %s\n", (60+i), portNumber, pinNumber, ((g_APinDescription[SpecialPinMap[i]].ulPinAttribute & PIN_ATTR_PWM)==PIN_ATTR_PWM)?"(HW PWM)":"" );
+    }
+    MessageF(mtype, "\n");
+    
+    
 }
 
 bool Platform::DiagnosticTest(GCodeBuffer& gb, StringRef& reply, int d)
@@ -2513,6 +2655,8 @@ bool Platform::DiagnosticTest(GCodeBuffer& gb, StringRef& reply, int d)
 		(void)RepRap::ReadDword(reinterpret_cast<const char*>(0x20800000));
 #elif SAM3XA
 		(void)RepRap::ReadDword(reinterpret_cast<const char*>(0x20200000));
+#elif __LPC17xx__
+        Message(WarningMessage, "TODO:: Skipping test on LPC");
 #else
 # error
 #endif
@@ -3069,6 +3213,23 @@ void Platform::UpdateMotorCurrent(size_t driver)
 		{
 			dacPiggy.setChannel(7-driver, current * 0.102);
 		}
+        
+#elif defined(__LPC17xx__)
+
+# ifndef __REARM__ //ReArm has no Current Control
+        //Current is in mA
+        uint16_t pot = (unsigned short) (current * digipotFactor / 1000);
+        if(pot > 256) pot = 255;
+        if(driver < 4){
+            mcp4451.setMCP4461Address(0x2C); //A0 and A1 Grounded. (001011 00)
+            mcp4451.setVolatileWiper(POT_WIPES[driver], pot);
+        } else {
+            mcp4451.setMCP4461Address(0x2D); //A0 Vcc, A1 Grounded. (001011 01)
+            mcp4451.setVolatileWiper(POT_WIPES[driver-4], pot);
+
+        }
+# endif //not REARM
+
 #else
 		// otherwise we can't set the motor current
 #endif
@@ -3719,7 +3880,7 @@ bool Platform::ConfigureLogging(GCodeBuffer& gb, StringRef& reply)
 			// Start logging
 			if (logger == nullptr)
 			{
-				logger = new Logger();
+				logger = new RAM2 Logger();
 			}
 			else
 			{
@@ -3890,6 +4051,16 @@ void Platform::SetBoardType(BoardType bt)
 		board = BoardType::RADDS_15;
 #elif defined(__ALLIGATOR__)
 		board = BoardType::Alligator_2;
+#elif defined(__LPC17xx__)
+# if defined(AZTEEGX5MINI1_1)
+        board = BoardType::AzteegX5Mini1_1;
+# elif defined(REARM1_0)
+        board = BoardType::ReArm1_0;
+# elif defined(SMOOTHIEBOARD1)
+        board = BoardType::Smoothieboard1;
+# else
+# error Undefined LPC based board
+# endif //__LPC17xx__
 #else
 # error Undefined board type
 #endif
@@ -3927,6 +4098,10 @@ const char* Platform::GetElectronicsString() const
 	case BoardType::RADDS_15:				return "RADDS 1.5";
 #elif defined(__ALLIGATOR__)
 	case BoardType::Alligator_2:			return "Alligator r2";
+#elif defined(__LPC17xx__)
+    case BoardType::AzteegX5Mini1_1:        return "AzteegX5 Mini v1.1";
+    case BoardType::ReArm1_0:               return "ReArm";
+    case BoardType::Smoothieboard1:          return "SmoothieBoard";
 #else
 # error Undefined board type
 #endif
@@ -3955,6 +4130,10 @@ const char* Platform::GetBoardString() const
 	case BoardType::RADDS_15:				return "radds15";
 #elif defined(__ALLIGATOR__)
 	case BoardType::Alligator_2:			return "alligator2";
+#elif defined(__LPC17xx__)
+    case BoardType::AzteegX5Mini1_1:        return "AzteegX5Mini1.1";
+    case BoardType::ReArm1_0:               return "ReArm";
+    case BoardType::Smoothieboard1:         return "SmoothieBoard";
 #else
 # error Undefined board type
 #endif
@@ -4407,10 +4586,36 @@ bool Platform::SetDateTime(time_t time)
 }
 
 // Step pulse timer interrupt
-void STEP_TC_HANDLER() __attribute__ ((hot));
+extern "C" void STEP_TC_HANDLER() __attribute__ ((hot));
 
 void STEP_TC_HANDLER()
 {
+#if __LPC17xx__
+    uint32_t regval = STEP_TC->IR;
+    //find which Match Register triggered the interrupt
+    if (regval & (1 << SBIT_MRI0_IFM)) //Interrupt flag for match channel 0.
+    {
+        STEP_TC->IR = (1<<SBIT_MRI0_IFM); //clear interrupt on MR0
+        STEP_TC->MCR  &= ~(1<<SBIT_MR0I); //Disable Int on MR0
+        
+# ifdef MOVE_DEBUG
+        ++numInterruptsExecuted;
+        lastInterruptTime = Platform::GetInterruptClocks();
+# endif
+        reprap.GetMove().Interrupt();                                // execute the step interrupt
+    }
+    
+    if (regval & (1 << SBIT_MRI1_IFM)) //Interrupt flag for match channel 1.
+    {
+        STEP_TC->IR = (1<<SBIT_MRI1_IFM); //clear interrupt
+        STEP_TC->MCR  &= ~(1<<SBIT_MR1I); //Disable Int on MR1
+# ifdef SOFT_TIMER_DEBUG
+        ++numSoftTimerInterruptsExecuted;
+# endif
+        SoftTimer::Interrupt();
+    }
+#else
+
 	uint32_t tcsr = STEP_TC->TC_CHANNEL[STEP_TC_CHAN].TC_SR;		// read the status register, which clears the interrupt
 	tcsr &= STEP_TC->TC_CHANNEL[STEP_TC_CHAN].TC_IMR;				// select only enabled interrupts
 	if ((tcsr & TC_SR_CPAS) != 0)									// the step interrupt uses RA compare
@@ -4431,6 +4636,9 @@ void STEP_TC_HANDLER()
 #endif
 		SoftTimer::Interrupt();
 	}
+
+
+#endif
 }
 
 // Schedule an interrupt at the specified clock count, or return true if that time is imminent or has passed already.
@@ -4443,6 +4651,10 @@ void STEP_TC_HANDLER()
 		cpu_irq_restore(flags);
 		return true;												// tell the caller to simulate an interrupt instead
 	}
+#ifdef __LPC17xx__
+    STEP_TC->MR0 = tim;
+    STEP_TC->MCR  |= (1<<SBIT_MR0I);     // Int on MR0 match
+#else
 
 	STEP_TC->TC_CHANNEL[STEP_TC_CHAN].TC_RA = tim;					// set up the compare register
 
@@ -4450,7 +4662,9 @@ void STEP_TC_HANDLER()
 	// Unfortunately, this would clear any other pending interrupts from the same TC.
 	// So we don't, and the step ISR must allow for getting called prematurely.
 	STEP_TC->TC_CHANNEL[STEP_TC_CHAN].TC_IER = TC_IER_CPAS;			// enable the interrupt
-	cpu_irq_restore(flags);
+#endif
+
+    cpu_irq_restore(flags);
 
 #ifdef MOVE_DEBUG
 		++numInterruptsScheduled;
@@ -4463,7 +4677,13 @@ void STEP_TC_HANDLER()
 // Make sure we get no step interrupts
 /*static*/ void Platform::DisableStepInterrupt()
 {
-	STEP_TC->TC_CHANNEL[STEP_TC_CHAN].TC_IDR = TC_IER_CPAS;
+#ifdef __LPC17xx__
+    STEP_TC->MCR  &= ~(1<<SBIT_MR0I); //Disable Int on MR0
+    
+#else
+
+    STEP_TC->TC_CHANNEL[STEP_TC_CHAN].TC_IDR = TC_IER_CPAS;
+#endif
 }
 
 // Schedule an interrupt at the specified clock count, or return true if that time is imminent or has passed already.
@@ -4477,12 +4697,19 @@ void STEP_TC_HANDLER()
 		return true;												// tell the caller to simulate an interrupt instead
 	}
 
+    
+#ifdef __LPC17xx__
+    STEP_TC->MR1 = tim; //set MR1 compare register
+    STEP_TC->MCR  |= (1<<SBIT_MR1I);     // Int on MR1 match
+#else
+
 	STEP_TC->TC_CHANNEL[STEP_TC_CHAN].TC_RB = tim;					// set up the compare register
 
 	// We would like to clear any pending step interrupt. To do this, we must read the TC status register.
 	// Unfortunately, this would clear any other pending interrupts from the same TC.
 	// So we don't, and the timer ISR must allow for getting called prematurely.
 	STEP_TC->TC_CHANNEL[STEP_TC_CHAN].TC_IER = TC_IER_CPBS;			// enable the interrupt
+#endif
 	cpu_irq_restore(flags);
 
 #ifdef SOFT_TIMER_DEBUG
@@ -4494,7 +4721,11 @@ void STEP_TC_HANDLER()
 // Make sure we get no step interrupts
 /*static*/ void Platform::DisableSoftTimerInterrupt()
 {
+#ifdef __LPC17xx__
+    STEP_TC->MCR  &= ~(1<<SBIT_MR1I); //Disable Int on MR1
+#else
 	STEP_TC->TC_CHANNEL[STEP_TC_CHAN].TC_IDR = TC_IER_CPBS;
+#endif
 }
 
 // Process a 1ms tick interrupt

@@ -22,7 +22,7 @@ void DriveMovement::InitialAllocate(unsigned int num)
 {
 	while (num != 0)
 	{
-		freeList = new DriveMovement(freeList);
+		freeList = new RAM1 DriveMovement(freeList);
 		++numFree;
 		--num;
 	}

@@ -1,9 +1,13 @@
-#include <Heating/Sensors/CurrentLoopTemperatureSensor.h>
 #include "TemperatureSensor.h"
 #include "Thermistor.h"
+
+#ifndef NO_THERMOCOUPLE_SUPPORT
+#include <Heating/Sensors/CurrentLoopTemperatureSensor.h>
 #include "ThermocoupleSensor31855.h"
 #include "ThermocoupleSensor31856.h"
 #include "RtdSensor31865.h"
+#endif //NO_THERMOCOUPLE_SUPPORT
+
 #include "GCodes/GCodeBuffer.h"
 
 #if HAS_CPU_TEMP_SENSOR
@@ -90,6 +94,8 @@ TemperatureSensor *TemperatureSensor::Create(unsigned int channel)
 	{
 		ts = new Thermistor(channel, false);
 	}
+#ifndef NO_THERMOCOUPLE_SUPPORT
+
 	else if (FirstPT1000Channel <= channel && channel < FirstPT1000Channel + Heaters)
 	{
 		ts = new Thermistor(channel - FirstPT1000Channel, true);
@@ -128,6 +134,9 @@ TemperatureSensor *TemperatureSensor::Create(unsigned int channel)
 		ts = new TmcDriverTemperatureSensor(channel);
 	}
 #endif
+    
+#endif //NO_THERMOCOUPLE_SUPPORT
+
 
 	if (ts != nullptr)
 	{

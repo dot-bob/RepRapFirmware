@@ -30,7 +30,11 @@ Licence: GPL
 
 #include "RepRapFirmware.h"
 #include "IoPort.h"
+
+#ifndef __LPC17xx__
 #include "DueFlashStorage.h"
+#endif
+
 #include "Fan.h"
 #include "Heating/TemperatureError.h"
 #include "OutputMemory.h"
@@ -48,6 +52,9 @@ Licence: GPL
 # include "DAC/DAC084S085.h"       // SPI DAC for motor current vref
 # include "EUI48/EUI48EEPROM.h"    // SPI EUI48 mac address EEPROM
 # include "Microstepping.h"
+#elif defined(__LPC17xx__)
+# include "MCP4461/MCP4461.h"
+
 #endif
 
 constexpr bool FORWARDS = true;
@@ -127,6 +134,11 @@ enum class BoardType : uint8_t
 	RADDS_15 = 1
 #elif defined(__ALLIGATOR__)
 	Alligator_2 = 1
+#elif defined(__LPC17xx__)
+    AzteegX5Mini1_1 = 1,
+    ReArm1_0 = 2,
+    Smoothieboard1 = 3
+
 #else
 # error Unknown board
 #endif
@@ -618,7 +630,11 @@ private:
 	void PrintUniqueId(MessageType mtype);
 #endif
 
-	// These are the structures used to hold our non-volatile data.
+#ifndef NO_SOFTWARE_RESET_DATA
+
+    
+    
+    // These are the structures used to hold our non-volatile data.
 	// The SAM3X and SAM4E don't have EEPROM so we save the data to flash. This unfortunately means that it gets cleared
 	// every time we reprogram the firmware via bossa, but it can be retained when firmware updates are performed
 	// via the web interface. That's why it's a good idea to implement versioning here - increase these values
@@ -668,6 +684,8 @@ private:
 #else
 	static_assert(SoftwareResetData::numberOfSlots * sizeof(SoftwareResetData) <= FLASH_DATA_LENGTH, "NVData too large");
 #endif
+
+#endif //NO_SOFTWARE_RESET_DATA
 
 	// Logging
 	Logger *logger;
@@ -758,6 +776,9 @@ private:
 	Pin spiDacCS[MaxSpiDac];
 	DAC084S085 dacAlligator;
 	DAC084S085 dacPiggy;
+#elif defined(__LPC17xx__)
+    MCP4461 mcp4451;// works for 5561 (only volatile setting commands)
+
 #endif
 
 	// Z probe
@@ -1117,7 +1138,12 @@ inline float Platform::GetPressureAdvance(size_t extruder) const
 // Get the interrupt clock count
 /*static*/ inline uint32_t Platform::GetInterruptClocks()
 {
+#if __LPC17xx__
+    return STEP_TC->TC;
+#else
+
 	return STEP_TC->TC_CHANNEL[STEP_TC_CHAN].TC_CV;
+#endif
 }
 
 // This is called by the tick ISR to get the raw Z probe reading to feed to the filter
@@ -1142,8 +1168,13 @@ inline uint16_t Platform::GetRawZProbeReading() const
 
 	case 6:
 		{
-			const bool b = IoPort::ReadPin(endStopPins[E0_AXIS + 1]);
-			return (b) ? 4000 : 0;
+            if(E0_AXIS+1<DRIVES){// prevent accidental array out of bounnds on board without E1
+                const bool b = IoPort::ReadPin(endStopPins[E0_AXIS + 1]);
+                return (b) ? 4000 : 0;
+            } else {
+                return 0;
+            }
+                
 		}
 
 	case 7:
@@ -1211,20 +1242,26 @@ inline OutputBuffer *Platform::GetAuxGCodeReply()
 #if defined(__SAME70Q21__)
 	return 0;
 #else
-	const PinDescription& pinDesc = g_APinDescription[STEP_PINS[driver]];
-#if defined(DUET_NG)
+
+# ifndef __LPC17xx__//LPC doesnt need pinDesc
+    const PinDescription& pinDesc = g_APinDescription[STEP_PINS[driver]];
+# endif
+    
+# if defined(DUET_NG)
 	return pinDesc.ulPin;
-#elif defined(DUET_M)
+# elif defined(DUET_M)
 	return pinDesc.ulPin;
-#elif defined(DUET_06_085)
+# elif defined(DUET_06_085)
 	return (pinDesc.pPort == PIOA) ? pinDesc.ulPin << 1 : pinDesc.ulPin;
-#elif defined(__RADDS__)
+# elif defined(__RADDS__)
 	return (pinDesc.pPort == PIOC) ? pinDesc.ulPin << 1 : pinDesc.ulPin;
-#elif defined(__ALLIGATOR__)
+# elif defined(__ALLIGATOR__)
 	return pinDesc.ulPin;
-#else
-# error Unknown board
-#endif
+# elif defined(__LPC17xx__)
+    return 1 << STEP_PIN_PORT2_POS[driver];
+# else
+#  error Unknown board
+# endif
 #endif
 }
 
@@ -1252,6 +1289,15 @@ inline OutputBuffer *Platform::GetAuxGCodeReply()
 	PIOB->PIO_ODSR = driverMap;
 	PIOD->PIO_ODSR = driverMap;
 	PIOC->PIO_ODSR = driverMap;
+#elif defined(__LPC17xx__)
+    //On Azteeg X5 Mini all step pins are on Port 2
+    //On Smoothieboard all step pins are on Port 2
+    //On ReArm all step pins are on Port 2
+
+    //using fast GPIO registers
+    LPC_GPIO2->FIOMASK = STEP_DRIVER_MASK;
+    LPC_GPIO2->FIOPIN = driverMap;
+
 #else
 # error Unknown board
 #endif
@@ -1281,6 +1327,10 @@ inline OutputBuffer *Platform::GetAuxGCodeReply()
 	PIOD->PIO_ODSR = 0;
 	PIOC->PIO_ODSR = 0;
 	PIOB->PIO_ODSR = 0;
+#elif defined(__LPC17xx__)
+    LPC_GPIO2->FIOMASK =  STEP_DRIVER_MASK;
+    LPC_GPIO2->FIOPIN = 0;
+
 #else
 # error Unknown board
 #endif

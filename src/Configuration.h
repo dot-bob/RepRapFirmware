@@ -156,6 +156,12 @@ constexpr size_t MaxGridProbePoints = 121;				// 121 allows us to probe 200x200 
 constexpr size_t MaxXGridPoints = 21;					// Maximum number of grid points in one X row
 constexpr size_t MaxProbePoints = 32;					// Maximum number of G30 probe points
 constexpr size_t MaxCalibrationPoints = 32;				// Should a power of 2 for speed
+#elif __LPC17xx__
+constexpr size_t MaxGridProbePoints = 121;                              // 121 allows us to probe 200x200 at 20mm intervals
+constexpr size_t MaxXGridPoints = 21;                                   // Maximum number of grid points in one X row
+constexpr size_t MaxProbePoints = 32;                                   // Maximum number of G30 probe points
+constexpr size_t MaxCalibrationPoints = 32;                // Should a power of 2 for speed
+
 #else
 # error
 #endif
@@ -206,6 +212,11 @@ constexpr size_t RESERVED_OUTPUT_BUFFERS = 1;			// Number of reserved output buf
 constexpr uint16_t OUTPUT_BUFFER_SIZE = 128;			// How many bytes does each OutputBuffer hold?
 constexpr size_t OUTPUT_BUFFER_COUNT = 32;				// How many OutputBuffer instances do we have?
 constexpr size_t RESERVED_OUTPUT_BUFFERS = 2;			// Number of reserved output buffers after long responses. Must be enough for an HTTP header
+#elif __LPC17xx__
+constexpr uint16_t OUTPUT_BUFFER_SIZE = 128;                    // How many bytes does each OutputBuffer hold?
+constexpr size_t OUTPUT_BUFFER_COUNT = 32;                              // How many OutputBuffer instances do we have?
+constexpr size_t RESERVED_OUTPUT_BUFFERS = 2;                   // Number of reserved output buffers after long responses. Must be enough for an HTTP header
+
 #else
 # error
 #endif

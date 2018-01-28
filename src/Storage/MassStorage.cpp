@@ -56,7 +56,7 @@ void MassStorage::Init()
 {
 	for (size_t i = 0; i < NumFileWriteBuffers; ++i)
 	{
-		freeWriteBuffers = new FileWriteBuffer(freeWriteBuffers);
+		freeWriteBuffers = new RAM1 FileWriteBuffer(freeWriteBuffers);
 	}
 
 	for (size_t card = 0; card < NumSdCards; ++card)
@@ -70,7 +70,7 @@ void MassStorage::Init()
 
 	sd_mmc_init(SdWriteProtectPins, SdSpiCSPins);		// initialize SD MMC stack
 
-	// Try to mount the first SD card only
+    // Try to mount the first SD card only
 	String<100> reply;
 	do
 	{

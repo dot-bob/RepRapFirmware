@@ -4,7 +4,11 @@
 #define FILESTORE_H
 
 #include "Core.h"
-#include "Libraries/Fatfs/ff.h"
+#ifdef __LPC17xx__
+# include "Libraries/Fatfs_alt/ff.h"
+#else
+# include "Libraries/Fatfs/ff.h"
+#endif
 #include "CRC32.h"
 
 class Platform;
