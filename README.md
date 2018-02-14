@@ -1,3 +1,17 @@
+
+# RepRapFirmware for LPC based Boards
+
+This is a fork of [DC42 RepRapFirmware](https://github.com/dc42/RepRapFirmware) modified to run on LPC1768 based 3D printer boards. Requires [CoreLPC](https://github.com/dc42/CoreLPC) to compile.
+
+The following features are currently not ported:
+* Ethernet
+* SPI Thermocouples
+* Reset/Fault Diagnostics
+
+**Experimental - Use at your own risk**
+
+# Original README.md
+
 This is firmware for controlling 3D printers and related devices using electronics based on ATSAM main processors.
 
 RepRapFirmware has pioneered a number of advances in 3D printing including:
