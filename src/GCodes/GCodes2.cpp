@@ -30,11 +30,15 @@
 # include "FirmwareUpdater.h"
 #endif
 
+#if SUPPORT_12864_LCD
+# include "Display/Display.h"
+#endif
+
 #include <utility>			// for std::swap
 
 // If the code to act on is completed, this returns true, otherwise false.
 // It is called repeatedly for a given code until it returns true for that code.
-bool GCodes::ActOnCode(GCodeBuffer& gb, StringRef& reply)
+bool GCodes::ActOnCode(GCodeBuffer& gb, const StringRef& reply)
 {
 	// Can we queue this code?
 	if (gb.CanQueueCodes() && codeQueue->QueueCode(gb, segmentsLeft))
@@ -73,7 +77,7 @@ bool GCodes::ActOnCode(GCodeBuffer& gb, StringRef& reply)
 	return true;
 }
 
-bool GCodes::HandleGcode(GCodeBuffer& gb, StringRef& reply)
+bool GCodes::HandleGcode(GCodeBuffer& gb, const StringRef& reply)
 {
 	GCodeResult result = GCodeResult::ok;
 	const int code = gb.GetCommandNumber();
@@ -290,7 +294,7 @@ bool GCodes::HandleGcode(GCodeBuffer& gb, StringRef& reply)
 	return HandleResult(gb, result, reply);
 }
 
-bool GCodes::HandleMcode(GCodeBuffer& gb, StringRef& reply)
+bool GCodes::HandleMcode(GCodeBuffer& gb, const StringRef& reply)
 {
 	GCodeResult result = GCodeResult::ok;
 
@@ -472,14 +476,14 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, StringRef& reply)
 		{
 			OutputBuffer *fileResponse;
 			const int sparam = (gb.Seen('S')) ? gb.GetIValue() : 0;
-			String<FILENAME_LENGTH> dir;
+			String<MaxFilenameLength> dir;
 			if (gb.Seen('P'))
 			{
 				gb.GetPossiblyQuotedString(dir.GetRef());
 			}
 			else
 			{
-				dir.GetRef().copy(platform.GetGCodeDir());
+				dir.copy(platform.GetGCodeDir());
 			}
 
 			if (sparam == 2)
@@ -573,7 +577,7 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, StringRef& reply)
 			return false;
 		}
 		{
-			String<FILENAME_LENGTH> filename;
+			String<MaxFilenameLength> filename;
 			if (gb.GetUnprecedentedString(filename.GetRef()))
 			{
 				if (QueueFileToPrint(filename.Pointer(), reply))
@@ -739,7 +743,7 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, StringRef& reply)
 
 	case 28: // Write to file
 		{
-			String<FILENAME_LENGTH> filename;
+			String<MaxFilenameLength> filename;
 			if (gb.GetUnprecedentedString(filename.GetRef()))
 			{
 				const bool ok = OpenFileToWrite(gb, platform.GetGCodeDir(), filename.Pointer(), 0, false, 0);
@@ -767,7 +771,7 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, StringRef& reply)
 
 	case 30:	// Delete file
 		{
-			String<FILENAME_LENGTH> filename;
+			String<MaxFilenameLength> filename;
 			if (gb.GetUnprecedentedString(filename.GetRef()))
 			{
 				platform.GetMassStorage()->Delete(platform.GetGCodeDir(), filename.Pointer(), false);
@@ -788,7 +792,7 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, StringRef& reply)
 			return false;
 		}
 		{
-			String<FILENAME_LENGTH> filename;
+			String<MaxFilenameLength> filename;
 			const bool gotFilename = gb.GetUnprecedentedString(filename.GetRef());
 			OutputBuffer *fileInfoResponse;
 			const bool done = reprap.GetPrintMonitor().GetFileInfoResponse((gotFilename) ? filename.Pointer() : nullptr, fileInfoResponse);
@@ -806,7 +810,7 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, StringRef& reply)
 		{
 			bool seen = false;
 			uint32_t newSimulationMode;
-			String<FILENAME_LENGTH> simFileName;
+			String<MaxFilenameLength> simFileName;
 
 			gb.TryGetPossiblyQuotedString('P', simFileName.GetRef(), seen);
 			if (seen)
@@ -888,7 +892,7 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, StringRef& reply)
 		if (fileBeingHashed == nullptr)
 		{
 			// See if we can open the file and start hashing
-			String<FILENAME_LENGTH> filename;
+			String<MaxFilenameLength> filename;
 			if (gb.GetUnprecedentedString(filename.GetRef()))
 			{
 				if (StartHash(filename.Pointer()))
@@ -1102,7 +1106,7 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, StringRef& reply)
 	case 98: // Call Macro/Subprogram
 		if (gb.Seen('P'))
 		{
-			String<FILENAME_LENGTH> filename;
+			String<MaxFilenameLength> filename;
 			gb.GetPossiblyQuotedString(filename.GetRef());
 			DoFileMacro(gb, filename.Pointer(), true);
 		}
@@ -1427,7 +1431,7 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, StringRef& reply)
 
 	case 117:	// Display message
 		{
-			String<FILENAME_LENGTH> msg;
+			String<MaxFilenameLength> msg;
 			gb.GetUnprecedentedString(msg.GetRef());
 			reprap.SetMessage(msg.Pointer());
 		}
@@ -2025,11 +2029,11 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, StringRef& reply)
 
 	case 291:	// Display message, optionally wait for acknowledgement
 		{
-			String<MESSAGE_LENGTH> title;
+			String<MaxMessageLength> title;
 			bool seen = false;
 			gb.TryGetQuotedString('R', title.GetRef(), seen);
 
-			String<MESSAGE_LENGTH> message;
+			String<MaxMessageLength> message;
 			gb.TryGetQuotedString('P', message.GetRef(), seen);
 			if (seen)
 			{
@@ -2094,8 +2098,8 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, StringRef& reply)
 
 	case 300:	// Beep
 		{
-			const int ms = (gb.Seen('P')) ? gb.GetIValue() : 1000;			// time in milliseconds
-			const int freq = (gb.Seen('S')) ? gb.GetIValue() : 4600;		// 4600Hz produces the loudest sound on a PanelDue
+			const unsigned int ms = (gb.Seen('P')) ? gb.GetUIValue() : 1000;			// time in milliseconds
+			const unsigned int freq = (gb.Seen('S')) ? gb.GetUIValue() : 4600;			// 4600Hz produces the loudest sound on a PanelDue
 			reprap.Beep(freq, ms);
 		}
 		break;
@@ -2536,23 +2540,26 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, StringRef& reply)
 		break;
 
 	case 540: // Set/report MAC address
-		if (gb.Seen('P'))
 		{
-			uint8_t mac[6];
-			if (gb.GetMacAddress(mac))
+			const unsigned int interface = (gb.Seen('I') ? gb.GetUIValue() : 0);
+			if (gb.Seen('P'))
 			{
-				platform.SetMACAddress(mac);
+				uint8_t mac[6];
+				if (gb.GetMacAddress(mac))
+				{
+					reprap.GetNetwork().SetMacAddress(interface, mac);
+				}
+				else
+				{
+					reply.copy("Bad MAC address");
+					result = GCodeResult::error;
+				}
 			}
 			else
 			{
-				reply.copy("Bad MAC address");
-				result = GCodeResult::error;
+				const uint8_t * const mac = reprap.GetNetwork().GetMacAddress(interface);
+				reply.printf("MAC: %02x:%02x:%02x:%02x:%02x:%02x", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
 			}
-		}
-		else
-		{
-			const uint8_t *mac = platform.MACAddress();
-			reply.printf("MAC: %02x:%02x:%02x:%02x:%02x:%02x", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
 		}
 		break;
 
@@ -2587,10 +2594,9 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, StringRef& reply)
 	case 552: // Enable/Disable network and/or Set/Get IP address
 		{
 			bool seen = false;
+			const unsigned int interface = (gb.Seen('I') ? gb.GetUIValue() : 0);
 
-#if HAS_MULTIPLE_NETWORK_INTERFACES
-			const int interface = (gb.Seen('I') ? gb.GetIValue() : 0);
-
+			String<SsidBufferLength> ssid;
 			if (reprap.GetNetwork().IsWiFiInterface(interface))
 			{
 				if (gb.Seen('S')) // Has the user turned the network on or off?
@@ -2598,16 +2604,14 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, StringRef& reply)
 					const int enableValue = gb.GetIValue();
 					seen = true;
 
-					char ssidBuffer[SsidLength + 1];
-					StringRef ssid(ssidBuffer, ARRAY_SIZE(ssidBuffer));
-					if (gb.Seen('P') && !gb.GetQuotedString(ssid))
+					if (gb.Seen('P') && !gb.GetQuotedString(ssid.GetRef()))
 					{
 						reply.copy("Bad or missing SSID");
 						result = GCodeResult::error;
 					}
 					else
 					{
-						reprap.GetNetwork().EnableWiFi(enableValue, ssid, reply);
+						result = reprap.GetNetwork().EnableInterface(interface, enableValue, ssid.GetRef(), reply);
 					}
 				}
 			}
@@ -2633,59 +2637,13 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, StringRef& reply)
 				if (gb.Seen('S')) // Has the user turned the network on or off?
 				{
 					seen = true;
-					reprap.GetNetwork().EnableEthernet(gb.GetIValue(), reply);
+					result = reprap.GetNetwork().EnableInterface(interface, gb.GetIValue(), ssid.GetRef(), reply);
 				}
 			}
-#elif HAS_WIFI_NETWORKING
-			if (gb.Seen('S')) // Has the user turned the network on or off?
-			{
-				const int enableValue = gb.GetIValue();
-				seen = true;
-
-				char ssidBuffer[SsidLength + 1];
-				StringRef ssid(ssidBuffer, ARRAY_SIZE(ssidBuffer));
-				if (gb.Seen('P') && !gb.GetQuotedString(ssid))
-				{
-					reply.copy("Bad or missing SSID");
-					result = GCodeResult::error;
-				}
-				else
-				{
-					reprap.GetNetwork().Enable(enableValue, ssid, reply);
-				}
-			}
-#else
-			if (gb.Seen('P'))
-			{
-				seen = true;
-				uint8_t eth[4];
-				if (gb.GetIPAddress(eth))
-				{
-					platform.SetIPAddress(eth);
-				}
-				else
-				{
-					reply.copy("Bad IP address");
-					result = GCodeResult::error;
-					break;
-				}
-			}
-
-			// Process this one last in case the IP address is changed and the network enabled in the same command
-			if (gb.Seen('S')) // Has the user turned the network on or off?
-			{
-				seen = true;
-				reprap.GetNetwork().Enable(gb.GetIValue(), reply);
-			}
-#endif
 
 			if (!seen)
 			{
-#if HAS_MULTIPLE_NETWORK_INTERFACES
-				result = GetGCodeResultFromError(reprap.GetNetwork().GetNetworkState(interface, reply));
-#else
-				result = GetGCodeResultFromError(reprap.GetNetwork().GetNetworkState(reply));
-#endif
+				result = reprap.GetNetwork().GetNetworkState(interface, reply);
 			}
 		}
 		break;
@@ -2806,14 +2764,14 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, StringRef& reply)
 			folder = platform.GetWebDir();
 			defaultFile = INDEX_PAGE_FILE;
 		}
-		String<FILENAME_LENGTH> filename;
+		String<MaxFilenameLength> filename;
 		if (gb.Seen('P'))
 		{
 			gb.GetPossiblyQuotedString(filename.GetRef());
 		}
 		else
 		{
-			filename.GetRef().copy(defaultFile);
+			filename.copy(defaultFile);
 		}
 		const FilePosition size = (gb.Seen('S') ? (FilePosition)gb.GetIValue() : 0);
 		const uint32_t crc32 = (gb.Seen('C') ? gb.GetUIValue() : 0);
@@ -3326,13 +3284,12 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, StringRef& reply)
 		break;
 
 	case 586: // Configure network protocols
-#if HAS_MULTIPLE_NETWORK_INTERFACES
 		{
-			const int interface = (gb.Seen('I') ? gb.GetIValue() : 0);
+			const unsigned int interface = (gb.Seen('I') ? gb.GetUIValue() : 0);
 
 			if (gb.Seen('P'))
 			{
-				const int protocol = gb.GetIValue();
+				const unsigned int protocol = gb.GetUIValue();
 				if (gb.Seen('S'))
 				{
 					const bool enable = (gb.GetIValue() == 1);
@@ -3340,43 +3297,20 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, StringRef& reply)
 					{
 						const int port = (gb.Seen('R')) ? gb.GetIValue() : -1;
 						const int secure = (gb.Seen('T')) ? gb.GetIValue() : -1;
-						reprap.GetNetwork().EnableProtocol(interface, protocol, port, secure, reply);
+						result = reprap.GetNetwork().EnableProtocol(interface, protocol, port, secure, reply);
 					}
 					else
 					{
-						reprap.GetNetwork().DisableProtocol(interface, protocol, reply);
+						result = reprap.GetNetwork().DisableProtocol(interface, protocol, reply);
 					}
 				}
-				break;
 			}
-
-			// Default to reporting current protocols if P or S parameter missing
-			reprap.GetNetwork().ReportProtocols(interface, reply);
-		}
-#else
-		if (gb.Seen('P'))
-		{
-			const int protocol = gb.GetIValue();
-			if (gb.Seen('S'))
+			else
 			{
-				const bool enable = (gb.GetIValue() == 1);
-				if (enable)
-				{
-					const int port = (gb.Seen('R')) ? gb.GetIValue() : -1;
-					const int secure = (gb.Seen('T')) ? gb.GetIValue() : -1;
-					reprap.GetNetwork().EnableProtocol(protocol, port, secure, reply);
-				}
-				else
-				{
-					reprap.GetNetwork().DisableProtocol(protocol, reply);
-				}
-				break;
+				// Default to reporting current protocols if P or S parameter missing
+				result = reprap.GetNetwork().ReportProtocols(interface, reply);
 			}
 		}
-
-		// Default to reporting current protocols if P or S parameter missing
-		reprap.GetNetwork().ReportProtocols(reply);
-#endif
 		break;
 
 #if HAS_WIFI_NETWORKING
@@ -3684,7 +3618,7 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, StringRef& reply)
 	case 752: // Start 3D scan
 		if (gb.Seen('P'))
 		{
-			String<FILENAME_LENGTH> file;
+			String<MaxFilenameLength> file;
 			gb.GetPossiblyQuotedString(file.GetRef());
 			if (gb.Seen('S'))
 			{
@@ -3998,6 +3932,14 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, StringRef& reply)
 		break;
 #endif
 
+		// 917 set standstill current reduction not yet supported
+
+#if SUPPORT_12864_LCD
+	case 918: // Configure direct-connect display
+		result = reprap.GetDisplay().Configure(gb, reply);
+		break;
+#endif
+
 	case 929: // Start/stop event logging
 		result = GetGCodeResultFromError(platform.ConfigureLogging(gb, reply));
 		break;
@@ -4050,7 +3992,7 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, StringRef& reply)
 	return HandleResult(gb, result, reply);
 }
 
-bool GCodes::HandleTcode(GCodeBuffer& gb, StringRef& reply)
+bool GCodes::HandleTcode(GCodeBuffer& gb, const StringRef& reply)
 {
 	if (gb.MachineState().runningM502)
 	{
@@ -4117,7 +4059,7 @@ bool GCodes::HandleTcode(GCodeBuffer& gb, StringRef& reply)
 }
 
 // This is called to deal with the result of processing a G- or M-code
-bool GCodes::HandleResult(GCodeBuffer& gb, GCodeResult rslt, StringRef& reply)
+bool GCodes::HandleResult(GCodeBuffer& gb, GCodeResult rslt, const StringRef& reply)
 {
 	switch (rslt)
 	{

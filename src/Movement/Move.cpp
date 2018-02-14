@@ -16,12 +16,12 @@ Move::Move() : currentDda(nullptr), active(false), scheduledMoves(0), completedM
 	kinematics = Kinematics::Create(KinematicsType::cartesian);			// default to Cartesian
 
 	// Build the DDA ring
-	DDA *dda = new RAM2 DDA(nullptr);
+	DDA *dda = new /*RAM2*/ DDA(nullptr);
 	ddaRingGetPointer = ddaRingAddPointer = dda;
 	for (size_t i = 1; i < DdaRingLength; i++)
 	{
 		DDA * const oldDda = dda;
-		dda = new RAM2 DDA(dda);
+		dda = new /*RAM2*/ DDA(dda);
 		oldDda->SetPrevious(dda);
 	}
 	ddaRingAddPointer->SetNext(dda);
@@ -895,7 +895,7 @@ void Move::SetAxisCompensation(unsigned int axis, float tangent)
 // Calibrate or set the bed equation after probing, returning true if an error occurred
 // sParam is the value of the S parameter in the G30 command that provoked this call.
 // Caller already owns the GCode movement lock.
-bool Move::FinishedBedProbing(int sParam, StringRef& reply)
+bool Move::FinishedBedProbing(int sParam, const StringRef& reply)
 {
 	bool error = false;
 	const size_t numPoints = probePoints.NumberOfProbePoints();

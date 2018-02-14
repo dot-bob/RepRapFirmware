@@ -29,10 +29,10 @@ Licence: GPL
 // Platform-specific includes
 
 #include "RepRapFirmware.h"
-#include "IoPort.h"
+#include "IoPorts.h"
 
 #ifndef __LPC17xx__
-#include "DueFlashStorage.h"
+# include "DueFlashStorage.h"
 #endif
 
 #include "Fan.h"
@@ -65,14 +65,14 @@ constexpr bool BACKWARDS = !FORWARDS;
 constexpr size_t VrefFilterIndex = Heaters;
 constexpr size_t VssaFilterIndex = Heaters + 1;
 # if HAS_CPU_TEMP_SENSOR
-constexpr size_t NumAdcFilters = Heaters + 3;
 constexpr size_t CpuTempFilterIndex = Heaters + 2;
+constexpr size_t NumAdcFilters = Heaters + 3;
 # else
 constexpr size_t NumAdcFilters = Heaters + 2;
 # endif
 #elif HAS_CPU_TEMP_SENSOR
-constexpr size_t NumAdcFilters = Heaters + 1;
 constexpr size_t CpuTempFilterIndex = Heaters;
+constexpr size_t NumAdcFilters = Heaters + 1;
 #else
 constexpr size_t NumAdcFilters = Heaters;
 #endif
@@ -118,14 +118,13 @@ constexpr uint32_t maxPidSpinDelay = 5000;			// Maximum elapsed time in millisec
 enum class BoardType : uint8_t
 {
 	Auto = 0,
-#if defined(__SAME70Q21__)
-	SAME70_TEST = 1
-#elif defined(DUET_NG) && defined(DUET_WIFI)
+#if defined(SAME70_TEST_BOARD)
+	SamE70TestBoard = 1
+#elif defined(DUET_NG)
 	DuetWiFi_10 = 1,
-	DuetWiFi_102 = 2
-#elif defined(DUET_NG) && defined(DUET_ETHERNET)
-	DuetEthernet_10 = 1,
-	DuetEthernet_102 = 2
+	DuetWiFi_102 = 2,
+	DuetEthernet_10 = 3,
+	DuetEthernet_102 = 4
 #elif defined(DUET_M)
 	DuetM_10 = 1,
 #elif defined(DUET_06_085)
@@ -162,7 +161,7 @@ enum class EndStopPosition
 	highEndStop = 2
 };
 
-// Type of an endstop input - values must tally with the M574 command S parameter
+// Type of an endstop input - values fmust tally with the M574 command S parameter
 enum class EndStopInputType
 {
 	activeLow = 0,
@@ -330,7 +329,7 @@ public:
 	Compatibility Emulating() const;
 	void SetEmulating(Compatibility c);
 	void Diagnostics(MessageType mtype);
-	bool DiagnosticTest(GCodeBuffer& gb, StringRef& reply, int d);
+	bool DiagnosticTest(GCodeBuffer& gb, const StringRef& reply, int d);
 	void ClassReport(uint32_t &lastTime);  			// Called on Spin() return to check everything's live.
 	void LogError(ErrorCode e) { errorCodeBits |= (uint32_t)e; }
 
@@ -342,9 +341,16 @@ public:
 	const char* GetElectronicsString() const;
 	const char* GetBoardString() const;
 
+#ifdef DUET_NG
+	bool IsDuetWiFi() const;
+#endif
+
+	const uint8_t *GetDefaultMacAddress() const { return defaultMacAddress; }
+
 	// Timing
-	static uint32_t GetInterruptClocks() __attribute__ ((hot));					// Get the interrupt clock count
-	static bool ScheduleStepInterrupt(uint32_t tim) __attribute__ ((hot));		// Schedule an interrupt at the specified clock count, or return true if it has passed already
+	static uint32_t GetInterruptClocks() __attribute__ ((hot));						// Get the interrupt clock count
+	static uint32_t GetInterruptClocksInterruptsDisabled() __attribute__ ((hot));	// Get the interrupt clock count, when we know already that interrupts are disabled
+	static bool ScheduleStepInterrupt(uint32_t tim) __attribute__ ((hot));			// Schedule an interrupt at the specified clock count, or return true if it has passed already
 	static void DisableStepInterrupt();						// Make sure we get no step interrupts
 	static bool ScheduleSoftTimerInterrupt(uint32_t tim);	// Schedule an interrupt at the specified clock count, or return true if it has passed already
 	static void DisableSoftTimerInterrupt();				// Make sure we get no software timer interrupts
@@ -369,8 +375,6 @@ public:
 	const uint8_t* NetMask() const;
 	void SetGateWay(uint8_t gw[]);
 	const uint8_t* GateWay() const;
-	void SetMACAddress(uint8_t mac[]);
-	const uint8_t* MACAddress() const;
 	void SetBaudRate(size_t chan, uint32_t br);
 	uint32_t GetBaudRate(size_t chan) const;
 	void SetCommsProperties(size_t chan, uint32_t cp);
@@ -499,7 +503,7 @@ public:
 	bool HomingZWithProbe() const;
 	bool WritePlatformParameters(FileStore *f, bool includingG31) const;
 	void SetProbing(bool isProbing);
-	bool ProgramZProbe(GCodeBuffer& gb, StringRef& reply);
+	bool ProgramZProbe(GCodeBuffer& gb, const StringRef& reply);
 	void SetZProbeModState(bool b) const;
 
 	// Heat and temperature
@@ -520,7 +524,7 @@ public:
 	void UpdateConfiguredHeaters();
 
 	// Fans
-	bool ConfigureFan(unsigned int mcode, int fanNumber, GCodeBuffer& gb, StringRef& reply, bool& error);
+	bool ConfigureFan(unsigned int mcode, int fanNumber, GCodeBuffer& gb, const StringRef& reply, bool& error);
 
 	float GetFanValue(size_t fan) const;					// Result is returned in percent
 	void SetFanValue(size_t fan, float speed);				// Accepts values between 0..1 and 1..255
@@ -533,7 +537,7 @@ public:
 
 	// Flash operations
 	void UpdateFirmware();
-	bool CheckFirmwareUpdatePrerequisites(StringRef& reply);
+	bool CheckFirmwareUpdatePrerequisites(const StringRef& reply);
 
 	// AUX device
 	void Beep(int freq, int ms);
@@ -573,7 +577,7 @@ public:
 #endif
 
 #if HAS_STALL_DETECT
-	bool ConfigureStallDetection(GCodeBuffer& gb, StringRef& reply);
+	bool ConfigureStallDetection(GCodeBuffer& gb, const StringRef& reply);
 #endif
 
 	// User I/O and servo support
@@ -583,7 +587,7 @@ public:
 	Pin GetEndstopPin(int endstop) const;			// Get the firmware pin number for an endstop
 
 	// Logging support
-	bool ConfigureLogging(GCodeBuffer& gb, StringRef& reply);
+	bool ConfigureLogging(GCodeBuffer& gb, const StringRef& reply);
 
 	// Ancilliary PWM
 	void SetExtrusionAncilliaryPwmValue(float v);
@@ -612,9 +616,15 @@ public:
 	// Misc
 	void InitI2c();
 
-	static uint8_t softwareResetDebugInfo;			// extra info for debugging
+	static uint8_t softwareResetDebugInfo;				// extra info for debugging
 
-//-------------------------------------------------------------------------------------------------------
+#if SAM4S || SAME70
+	// Static data used by step ISR
+	static volatile uint32_t stepTimerPendingStatus;	// for holding status bits that we have read (and therefore cleared) but haven't serviced yet
+	static volatile uint32_t stepTimerHighWord;			// upper 16 bits of step timer
+#endif
+
+	//-------------------------------------------------------------------------------------------------------
   
 private:
 	Platform(const Platform&);						// private copy constructor to make sure we don't try to copy a Platform
@@ -705,7 +715,7 @@ private:
 	byte ipAddress[4];
 	byte netMask[4];
 	byte gateWay[4];
-	uint8_t macAddress[6];
+	uint8_t defaultMacAddress[6];
 	Compatibility compatibility;
 
 	BoardType board;
@@ -930,21 +940,18 @@ private:
 };
 
 // Where the htm etc files are
-
 inline const char* Platform::GetWebDir() const
 {
 	return WEB_DIR;
 }
 
 // Where the gcodes are
-
 inline const char* Platform::GetGCodeDir() const
 {
 	return GCODE_DIR;
 }
 
 // Where the system files are
-
 inline const char* Platform::GetSysDir() const
 {
 	return SYS_DIR;
@@ -1134,15 +1141,25 @@ inline const uint8_t* Platform::GateWay() const
 	return gateWay;
 }
 
-inline const uint8_t* Platform::MACAddress() const
-{
-	return macAddress;
-}
-
 inline float Platform::GetPressureAdvance(size_t extruder) const
 {
 	return (extruder < MaxExtruders) ? pressureAdvance[extruder] : 0.0;
 }
+
+#if SAM4S || SAME70		// if the TCs are 16-bit
+
+// Get the interrupt clock count
+/*static*/ inline uint32_t Platform::GetInterruptClocks()
+{
+	const irqflags_t flags = cpu_irq_save();						// ensure interrupts are disabled
+	const uint32_t rslt = GetInterruptClocksInterruptsDisabled();
+	cpu_irq_restore(flags);											// restore interrupt enable state
+	return rslt;
+}
+
+// Function GetInterruptClocks() is quite long for these processors, so it is moved to Platform.cpp and no longer inlined
+
+#else					// TCs are 32-bit
 
 // Get the interrupt clock count
 /*static*/ inline uint32_t Platform::GetInterruptClocks()
@@ -1154,6 +1171,20 @@ inline float Platform::GetPressureAdvance(size_t extruder) const
 	return STEP_TC->TC_CHANNEL[STEP_TC_CHAN].TC_CV;
 #endif
 }
+
+// Get the interrupt clock count, when we know that interrupts are already disabled
+/*static*/ inline uint32_t Platform::GetInterruptClocksInterruptsDisabled()
+{
+#if __LPC17xx__
+    return STEP_TC->TC;
+#else
+
+    return STEP_TC->TC_CHANNEL[STEP_TC_CHAN].TC_CV;
+#endif
+
+}
+
+#endif
 
 // This is called by the tick ISR to get the raw Z probe reading to feed to the filter
 inline uint16_t Platform::GetRawZProbeReading() const
