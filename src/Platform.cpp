@@ -309,34 +309,6 @@ extern "C"
 	void PendSV_Handler		() __attribute__ ((alias("OtherFault_Handler")));
 }
 
-// ZProbeParameters class
-void ZProbeParameters::Init(float h)
-{
-	adcValue = Z_PROBE_AD_VALUE;
-	xOffset = yOffset = 0.0;
-	triggerHeight = h;
-	calibTemperature = 20.0;
-	temperatureCoefficient = 0.0;	// no default temperature correction
-	diveHeight = DefaultZDive;
-	probeSpeed = DefaultProbingSpeed;
-	travelSpeed = DefaultZProbeTravelSpeed;
-	recoveryTime = 0.0;
-	tolerance = DefaultZProbeTolerance;
-	maxTaps = DefaultZProbeTaps;
-	invertReading = false;
-}
-
-float ZProbeParameters::GetStopHeight(float temperature) const
-{
-	return ((temperature - calibTemperature) * temperatureCoefficient) + triggerHeight;
-}
-
-bool ZProbeParameters::WriteParameters(FileStore *f, unsigned int probeType) const
-{
-	scratchString.printf("G31 T%u P%" PRIu32 " X%.1f Y%.1f Z%.2f\n", probeType, adcValue, (double)xOffset, (double)yOffset, (double)triggerHeight);
-	return f->Write(scratchString.Pointer());
-}
-
 //*************************************************************************************************
 // Platform class
 
@@ -480,7 +452,7 @@ void Platform::Init()
 	maxPrintingAcceleration = maxTravelAcceleration = 10000.0;
 
 	// Z PROBE
-	zProbeType = 0;								// default is to use no Z probe
+	zProbeType = ZProbeType::none;				// default is to use no Z probe
 	zProbePin = Z_PROBE_PIN;
 	zProbeAdcChannel = PinToAdcChannel(zProbePin);
 	SetZProbeDefaults();
@@ -776,35 +748,36 @@ void Platform::InitZProbe()
 
 	switch (zProbeType)
 	{
-	case 1:
-	case 2:
+	case ZProbeType::analog:
+	case ZProbeType::dumbModulated:
 		AnalogInEnableChannel(zProbeAdcChannel, true);
 		pinMode(zProbePin, AIN);
 		pinMode(zProbeModulationPin, OUTPUT_HIGH);		// enable the IR LED
 		break;
 
-	case 3:
+	case ZProbeType::alternateAnalog:
 		AnalogInEnableChannel(zProbeAdcChannel, true);
 		pinMode(zProbePin, AIN);
 		pinMode(zProbeModulationPin, OUTPUT_LOW);		// enable the alternate sensor
 		break;
 
-	case 4:
+	case ZProbeType::e0Switch:
 		AnalogInEnableChannel(zProbeAdcChannel, false);
 		pinMode(zProbePin, INPUT_PULLUP);
 		pinMode(endStopPins[E0_AXIS], INPUT);
 		pinMode(zProbeModulationPin, OUTPUT_LOW);		// we now set the modulation output high during probing only when using probe types 4 and higher
 		break;
 
-	case 5:
-	case 8:
+	case ZProbeType::digital:
+	case ZProbeType::unfilteredDigital:
+	case ZProbeType::blTouch:
 	default:
 		AnalogInEnableChannel(zProbeAdcChannel, false);
 		pinMode(zProbePin, INPUT_PULLUP);
 		pinMode(zProbeModulationPin, OUTPUT_LOW);		// we now set the modulation output high during probing only when using probe types 4 and higher
 		break;
 
-	case 6:
+	case ZProbeType::e1Switch:
         if( E0_AXIS+1 < DRIVES ) {//avoid accidental out of bounds on azteeg which doesnt have E1
             AnalogInEnableChannel(zProbeAdcChannel, false);
             pinMode(zProbePin, INPUT_PULLUP);
@@ -813,7 +786,7 @@ void Platform::InitZProbe()
         }
         break;
 
-	case 7:
+	case ZProbeType::zSwitch:
 		AnalogInEnableChannel(zProbeAdcChannel, false);
 		pinMode(zProbePin, INPUT_PULLUP);
 		pinMode(endStopPins[Z_AXIS], INPUT);
@@ -827,26 +800,27 @@ void Platform::InitZProbe()
 int Platform::GetZProbeReading() const
 {
 	int zProbeVal = 0;			// initialised to avoid spurious compiler warning
-	if (zProbeType == 8 || (zProbeOnFilter.IsValid() && zProbeOffFilter.IsValid()))
+	if (zProbeType == ZProbeType::unfilteredDigital || (zProbeOnFilter.IsValid() && zProbeOffFilter.IsValid()))
 	{
 		switch (zProbeType)
 		{
-		case 1:		// Simple or intelligent IR sensor
-		case 3:		// Alternate sensor
-		case 4:		// Switch connected to E0 endstop input
-		case 5:		// Switch connected to Z probe input
-		case 6:		// Switch connected to E1 endstop input
-		case 7:		// Switch connected to Z endstop input
+		case ZProbeType::analog:				// Simple or intelligent IR sensor
+		case ZProbeType::alternateAnalog:		// Alternate sensor
+		case ZProbeType::e0Switch:				// Switch connected to E0 endstop input
+		case ZProbeType::digital:				// Switch connected to Z probe input
+		case ZProbeType::e1Switch:				// Switch connected to E1 endstop input
+		case ZProbeType::zSwitch:				// Switch connected to Z endstop input
+		case ZProbeType::blTouch:
 			zProbeVal = (int) ((zProbeOnFilter.GetSum() + zProbeOffFilter.GetSum()) / (8 * Z_PROBE_AVERAGE_READINGS));
 			break;
 
-		case 2:		// Dumb modulated IR sensor.
+		case ZProbeType::dumbModulated:		// Dumb modulated IR sensor.
 			// We assume that zProbeOnFilter and zProbeOffFilter average the same number of readings.
 			// Because of noise, it is possible to get a negative reading, so allow for this.
 			zProbeVal = (int) (((int32_t) zProbeOnFilter.GetSum() - (int32_t) zProbeOffFilter.GetSum()) / (int)(4 * Z_PROBE_AVERAGE_READINGS));
 			break;
 
-		case 8:		// Switch connected to Z probe input, no filtering
+		case ZProbeType::unfilteredDigital:		// Switch connected to Z probe input, no filtering
 			zProbeVal = GetRawZProbeReading()/4;
 			break;
 
@@ -865,7 +839,7 @@ int Platform::GetZProbeSecondaryValues(int& v1, int& v2)
 	{
 		switch (zProbeType)
 		{
-		case 2:		// modulated IR sensor
+		case ZProbeType::dumbModulated:		// modulated IR sensor
 			v1 = (int) (zProbeOnFilter.GetSum() / (4 * Z_PROBE_AVERAGE_READINGS));	// pass back the reading with IR turned on
 			return 1;
 		default:
@@ -906,7 +880,7 @@ float Platform::GetZProbeDiveHeight() const
 
 float Platform::GetZProbeStartingHeight()
 {
-	const ZProbeParameters& params = GetCurrentZProbeParameters();
+	const ZProbe& params = GetCurrentZProbeParameters();
 	return params.diveHeight + max<float>(params.GetStopHeight(GetZProbeTemperature()), 0.0);
 }
 
@@ -915,58 +889,60 @@ float Platform::GetZProbeTravelSpeed() const
 	return GetCurrentZProbeParameters().travelSpeed;
 }
 
-void Platform::SetZProbeType(int pt)
+void Platform::SetZProbeType(unsigned int pt)
 {
-	zProbeType = (pt >= 0 && pt <= 8) ? pt : 0;
+	zProbeType = (pt < (unsigned int)ZProbeType::numTypes) ? (ZProbeType)pt : ZProbeType::none;
 	InitZProbe();
 }
 
 void Platform::SetProbing(bool isProbing)
 {
-	if (zProbeType > 3)
+	if (zProbeType > ZProbeType::alternateAnalog)
 	{
 		// For Z probe types other than 1/2/3 we set the modulation pin high at the start of a probing move and low at the end
 		digitalWrite(zProbeModulationPin, isProbing);
 	}
 }
 
-const ZProbeParameters& Platform::GetZProbeParameters(int32_t probeType) const
+const ZProbe& Platform::GetZProbeParameters(ZProbeType probeType) const
 {
 	switch (probeType)
 	{
-	case 1:
-	case 2:
-	case 5:
-	case 8:
+	case ZProbeType::analog:
+	case ZProbeType::dumbModulated:
+	case ZProbeType::digital:
+	case ZProbeType::unfilteredDigital:
+	case ZProbeType::blTouch:
 		return irZProbeParameters;
-	case 3:
+	case ZProbeType::alternateAnalog:
 		return alternateZProbeParameters;
-	case 4:
-	case 6:
-	case 7:
+	case ZProbeType::e0Switch:
+	case ZProbeType::e1Switch:
+	case ZProbeType::zSwitch:
 	default:
 		return switchZProbeParameters;
 	}
 }
 
-void Platform::SetZProbeParameters(int32_t probeType, const ZProbeParameters& params)
+void Platform::SetZProbeParameters(ZProbeType probeType, const ZProbe& params)
 {
 	switch (probeType)
 	{
-	case 1:
-	case 2:
-	case 5:
-	case 8:
+	case ZProbeType::analog:
+	case ZProbeType::dumbModulated:
+	case ZProbeType::digital:
+	case ZProbeType::unfilteredDigital:
+	case ZProbeType::blTouch:
 		irZProbeParameters = params;
 		break;
 
-	case 3:
+	case ZProbeType::alternateAnalog:
 		alternateZProbeParameters = params;
 		break;
 
-	case 4:
-	case 6:
-	case 7:
+	case ZProbeType::e0Switch:
+	case ZProbeType::e1Switch:
+	case ZProbeType::zSwitch:
 	default:
 		switchZProbeParameters = params;
 		break;
@@ -1008,7 +984,7 @@ void Platform::SetZProbeModState(bool b) const
 // Return true if we are using a bed probe to home Z
 bool Platform::HomingZWithProbe() const
 {
-	return zProbeType != 0 && (endStopInputType[Z_AXIS] == EndStopInputType::zProbe || endStopPos[Z_AXIS] == EndStopPosition::noEndStop);
+	return zProbeType != ZProbeType::none && (endStopInputType[Z_AXIS] == EndStopInputType::zProbe || endStopPos[Z_AXIS] == EndStopPosition::noEndStop);
 }
 
 // Check the prerequisites for updating the main firmware. Return True if satisfied, else print a message to 'reply' and return false.
@@ -2038,7 +2014,7 @@ void Platform::InitialiseInterrupts()
     
 #else
 	pmc_set_writeprotect(false);
-	pmc_enable_periph_clk((uint32_t) STEP_TC_ID);
+	pmc_enable_periph_clk(STEP_TC_ID);
 	tc_init(STEP_TC, STEP_TC_CHAN, TC_CMR_WAVE | TC_CMR_WAVSEL_UP | TC_CMR_TCCLKS_TIMER_CLOCK4 | TC_CMR_EEVT_XC0);	// must set TC_CMR_EEVT nonzero to get RB compare interrupts
 	STEP_TC->TC_CHANNEL[STEP_TC_CHAN].TC_IDR = ~(uint32_t)0; // interrupts disabled for now
 #if SAM4S || SAME70		// if 16-bit TCs
@@ -2052,7 +2028,7 @@ void Platform::InitialiseInterrupts()
 
     
 #if HAS_LWIP_NETWORKING
-	pmc_enable_periph_clk((uint32_t) NETWORK_TC_ID);
+	pmc_enable_periph_clk(NETWORK_TC_ID);
 # if SAME70
 	// Timer interrupt to keep the networking timers running (called at 18Hz, which is almost as low as we can get because the timer is 16-bit)
 	tc_init(NETWORK_TC, NETWORK_TC_CHAN, TC_CMR_WAVE | TC_CMR_WAVSEL_UP_RC | TC_CMR_TCCLKS_TIMER_CLOCK4);
@@ -2107,14 +2083,11 @@ void Platform::InitialiseInterrupts()
 # error
 #endif
 
-    
-#if __LPC17xx__
+#if defined(DUET_NG) || defined(DUET_M) || defined(DUET_06_085)
+	NVIC_SetPriority(I2C_IRQn, NvicPriorityTwi);
+#elif __LPC17xx__
     NVIC_SetPriority(I2C0_IRQn, NvicPriorityTwi);
     NVIC_SetPriority(I2C1_IRQn, NvicPriorityTwi);
-#else
-# if !SAME70
-	NVIC_SetPriority(TWI1_IRQn, NvicPriorityTwi);
-# endif
 #endif
     
 
@@ -4684,7 +4657,48 @@ volatile uint32_t Platform::stepTimerHighWord = 0;		// upper 16 bits of step tim
 void STEP_TC_HANDLER()
 {
 
-#if __LPC17xx__
+#if SAM4S || SAME70
+	// On the SAM4 we need to check for overflow whenever we read the step clock counter, and that clears the status flags.
+	// So we store the un-serviced status flags.
+	for (;;)
+	{
+		uint32_t tcsr = STEP_TC->TC_CHANNEL[STEP_TC_CHAN].TC_SR | Platform::stepTimerPendingStatus;	// read the status register, which clears the status bits, and or-in any pending status bits
+		tcsr &= STEP_TC->TC_CHANNEL[STEP_TC_CHAN].TC_IMR;			// select only enabled interrupts
+		if (tcsr == 0)
+		{
+			break;
+		}
+
+		if ((tcsr & TC_SR_COVFS) != 0)
+		{
+			Platform::stepTimerHighWord += (1u << 16);
+			Platform::stepTimerPendingStatus &= ~TC_SR_COVFS;
+		}
+
+		if ((tcsr & TC_SR_CPAS) != 0)								// the step interrupt uses RA compare
+		{
+			STEP_TC->TC_CHANNEL[STEP_TC_CHAN].TC_IDR = TC_IER_CPAS;	// disable the interrupt
+			Platform::stepTimerPendingStatus &= ~TC_SR_CPAS;
+#ifdef MOVE_DEBUG
+			++numInterruptsExecuted;
+			lastInterruptTime = Platform::GetInterruptClocks();
+#endif
+			reprap.GetMove().Interrupt();							// execute the step interrupt
+		}
+
+		if ((tcsr & TC_SR_CPBS) != 0)
+		{
+			STEP_TC->TC_CHANNEL[STEP_TC_CHAN].TC_IDR = TC_IER_CPBS;	// disable the interrupt
+			Platform::stepTimerPendingStatus &= ~TC_SR_CPBS;
+
+#ifdef SOFT_TIMER_DEBUG
+            ++numSoftTimerInterruptsExecuted;
+#endif
+            SoftTimer::Interrupt();
+        }
+    }
+            
+#elif __LPC17xx__
     uint32_t regval = STEP_TC->IR;
     //find which Match Register triggered the interrupt
     if (regval & (1 << SBIT_MRI0_IFM)) //Interrupt flag for match channel 0.
@@ -4709,52 +4723,14 @@ void STEP_TC_HANDLER()
         SoftTimer::Interrupt();
     }
     
-#elif SAM4S || SAME70
-    // On the SAM4 we need to check for overflow whenever we read the step clock counter, and that clears the status flags.
-    // So we store the un-serviced status flags.
-    for (;;)
-    {
-        uint32_t tcsr = STEP_TC->TC_CHANNEL[STEP_TC_CHAN].TC_SR | Platform::stepTimerPendingStatus;    // read the status register, which clears the status bits, and or-in any pending status bits
-        tcsr &= STEP_TC->TC_CHANNEL[STEP_TC_CHAN].TC_IMR;                // select only enabled interrupts
-        if (tcsr == 0)
-        {
-            break;
-        }
-        
-        if ((tcsr & TC_SR_COVFS) != 0)
-        {
-            Platform::stepTimerHighWord += (1u << 16);
-            Platform::stepTimerPendingStatus &= ~TC_SR_COVFS;
-        }
-        
-        if ((tcsr & TC_SR_CPAS) != 0)                                    // the step interrupt uses RA compare
-        {
-            STEP_TC->TC_CHANNEL[STEP_TC_CHAN].TC_IDR = TC_IER_CPAS;        // disable the interrupt
-            Platform::stepTimerPendingStatus &= ~TC_SR_CPAS;
-#ifdef MOVE_DEBUG
-            ++numInterruptsExecuted;
-            lastInterruptTime = Platform::GetInterruptClocks();
-#endif
-            reprap.GetMove().Interrupt();                                // execute the step interrupt
-        }
-        
-        if ((tcsr & TC_SR_CPBS) != 0)
-        {
-            STEP_TC->TC_CHANNEL[STEP_TC_CHAN].TC_IDR = TC_IER_CPBS;        // disable the interrupt
-            Platform::stepTimerPendingStatus &= ~TC_SR_CPBS;
-#ifdef SOFT_TIMER_DEBUG
-            ++numSoftTimerInterruptsExecuted;
-#endif
-            SoftTimer::Interrupt();
-        }
-    }
 #else
-    uint32_t tcsr = STEP_TC->TC_CHANNEL[STEP_TC_CHAN].TC_SR;            // read the status register, which clears the status bits, and or-in any pending status bits
-    tcsr &= STEP_TC->TC_CHANNEL[STEP_TC_CHAN].TC_IMR;                    // select only enabled interrupts
-    
-    if ((tcsr & TC_SR_CPAS) != 0)                                    // the step interrupt uses RA compare
-    {
-        STEP_TC->TC_CHANNEL[STEP_TC_CHAN].TC_IDR = TC_IER_CPAS;        // disable the interrupt
+	uint32_t tcsr = STEP_TC->TC_CHANNEL[STEP_TC_CHAN].TC_SR;		// read the status register, which clears the status bits, and or-in any pending status bits
+	tcsr &= STEP_TC->TC_CHANNEL[STEP_TC_CHAN].TC_IMR;				// select only enabled interrupts
+
+	if ((tcsr & TC_SR_CPAS) != 0)									// the step interrupt uses RA compare
+	{
+		STEP_TC->TC_CHANNEL[STEP_TC_CHAN].TC_IDR = TC_IER_CPAS;		// disable the interrupt
+
 #ifdef MOVE_DEBUG
         ++numInterruptsExecuted;
         lastInterruptTime = Platform::GetInterruptClocks();
@@ -4967,7 +4943,7 @@ void Platform::Tick()
 			// If we are not using a simple modulated IR sensor, process the Z probe reading on every tick for a faster response.
 			// If we are using a simple modulated IR sensor then we need to allow the reading to settle after turning the IR emitter on or off,
 			// so on alternate ticks we read it and switch the emitter
-			if (zProbeType != 2)
+			if (zProbeType != ZProbeType::dumbModulated)
 			{
 				const_cast<ZProbeAveragingFilter&>((tickState == 1) ? zProbeOnFilter : zProbeOffFilter).ProcessReading(GetRawZProbeReading());
 			}
@@ -4977,7 +4953,7 @@ void Platform::Tick()
 
 	case 2:
 		const_cast<ZProbeAveragingFilter&>(zProbeOnFilter).ProcessReading(GetRawZProbeReading());
-		if (zProbeType == 2)									// if using a modulated IR sensor
+		if (zProbeType == ZProbeType::dumbModulated)									// if using a modulated IR sensor
 		{
 			digitalWrite(zProbeModulationPin, LOW);				// turn off the IR emitter
 		}
@@ -4990,7 +4966,7 @@ void Platform::Tick()
 		// no break
 	case 0:			// this is the state after initialisation, no conversion has been started
 	default:
-		if (zProbeType == 2)									// if using a modulated IR sensor
+		if (zProbeType == ZProbeType::dumbModulated)									// if using a modulated IR sensor
 		{
 			digitalWrite(zProbeModulationPin, HIGH);			// turn on the IR emitter
 		}

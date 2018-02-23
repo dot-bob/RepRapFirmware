@@ -8,6 +8,7 @@
 //NOTES:
 // Filament detector pin and Fan RPM pin must be on a spare pin on Port0 or Port2 only (UNTESTED)
 // Azteeg X5 (and maybe others) probe endstop pin is not an ADC pin, so only Digital is supported, or select another spare ADC capable pin
+// Note. ADC inputs are NOT 5V tolerant
 // Currently No support For Thermocouple etc sensors, only thermistors!
 
 
