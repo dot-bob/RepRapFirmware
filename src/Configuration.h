@@ -54,8 +54,15 @@ constexpr float DefaultMessageTimeout = 10.0;			// How long a message is display
 static_assert(FanCheckInterval < MinimumWarningInterval, "FanCheckInterval too large");
 
 // Comms defaults
-constexpr unsigned int MAIN_BAUD_RATE = 115200;			// Default communication speed of the USB if needed
-constexpr unsigned int AUX_BAUD_RATE = 57600;			// Ditto - for auxiliary UART device
+#ifdef __MBED__
+//For Testing on MBED
+//rxtx has some issues at 115200, so set to 57600 for MBED (mbed uses rxtx on the LPC to provide USB via external chip)
+constexpr unsigned int MAIN_BAUD_RATE = 57600;			// Default communication speed of the USB if needed
+constexpr unsigned int AUX_BAUD_RATE = 115200;			// Ditto - for auxiliary UART device
+#else
+constexpr unsigned int MAIN_BAUD_RATE = 115200;            // Default communication speed of the USB if needed
+constexpr unsigned int AUX_BAUD_RATE = 57600;            // Ditto - for auxiliary UART device
+#endif
 constexpr unsigned int AUX2_BAUD_RATE = 115200;			// Ditto - for second auxiliary UART device
 constexpr uint32_t SERIAL_MAIN_TIMEOUT = 1000;			// timeout in ms for sending data to the main serial/USB port
 
@@ -160,7 +167,7 @@ constexpr size_t MaxCalibrationPoints = 32;				// Should a power of 2 for speed
 constexpr size_t MaxGridProbePoints = 121;                              // 121 allows us to probe 200x200 at 20mm intervals
 constexpr size_t MaxXGridPoints = 21;                                   // Maximum number of grid points in one X row
 constexpr size_t MaxProbePoints = 32;                                   // Maximum number of G30 probe points
-constexpr size_t MaxCalibrationPoints = 32;                // Should a power of 2 for speed
+constexpr size_t MaxCalibrationPoints = 16;                // Should a power of 2 for speed
 
 #else
 # error
@@ -253,7 +260,7 @@ constexpr float DefaultMaxSpindleRpm = 10000;			// Default spindle RPM at full P
 constexpr float DefaultMaxLaserPower = 255.0;			// Power setting in M3 command for full power
 
 // File handling
-constexpr size_t MAX_FILES = 10;						// Must be large enough to handle the max number of simultaneous web requests + files being printed
+constexpr size_t MAX_FILES = 3;						// Must be large enough to handle the max number of simultaneous web requests + files being printed
 constexpr size_t FILE_BUFFER_SIZE = 256;
 
 // Webserver stuff

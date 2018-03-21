@@ -167,7 +167,7 @@ Licence: GPL
 
 // We just need one instance of RepRap; everything else is contained within it and hidden
 
-RepRap reprap /*STATICRAM1*/;
+RepRap reprap REPRAP_STATIC;
 
 const char * const moduleName[] =
 {
@@ -193,7 +193,7 @@ const char * const moduleName[] =
 
 // Utilities and storage not part of any class
 
-static char scratchStringBuffer[220] STATICRAM1;		// this needs to be long enough to print delta parameters and 24 words of stack (217 bytes)
+static char scratchStringBuffer[220] SCRATCHSTRING_STATIC;		// this needs to be long enough to print delta parameters and 24 words of stack (217 bytes)
 StringRef scratchString(scratchStringBuffer, ARRAY_SIZE(scratchStringBuffer));
 
 // For debug use

@@ -323,14 +323,14 @@ Platform::Platform() :
 		lastFanCheckTime(0), auxGCodeReply(nullptr), tickState(0), debugCode(0), lastWarningMillis(0), deliberateError(false), i2cInitialised(false)
 {
 	// Output
-	auxOutput = new RAM2 OutputStack();
+	auxOutput = new AUXOUT_RAM OutputStack();
 #ifdef SERIAL_AUX2_DEVICE
 	aux2Output = new OutputStack();
 #endif
-	usbOutput = new RAM2 OutputStack();
+	usbOutput = new USBOUT_RAM OutputStack();
 
 	// Files
-	massStorage = new RAM2 MassStorage(this);
+	massStorage = new MS_RAM MassStorage(this);
 }
 
 //*******************************************************************************************************************
@@ -533,7 +533,7 @@ void Platform::Init()
 #elif defined(__RADDS__) || defined(__ALLIGATOR__)
 		// I don't know whether RADDS and Alligator have hardware pullup resistors or not. I'll assume they might not.
 		setPullup(endStopPins[drive], true);
-#elif defined(__LPC__)
+#elif defined(__LPC17xx__)
        //I think they have hardware pullups.
         
 #endif
@@ -1951,10 +1951,21 @@ void Platform::SoftwareReset(uint16_t reason, const uint32_t *stk)
 
 #if HAS_LWIP_NETWORKING
 
+extern "C" void NETWORK_TC_HANDLER() __attribute__ ((hot)); //SD Added extern as the handler below wasnt being included
 void NETWORK_TC_HANDLER()
 {
+
+#if __LPC17xx__
+    NETWORK_TC->IR |= (1<<SBIT_MRI0_IFM); //clear Interrupt Flag Match on MR0 by writing a 1 to it.
+#else
+    
 	tc_get_status(NETWORK_TC, NETWORK_TC_CHAN);
-	reprap.GetNetwork().Interrupt();
+#endif
+
+    reprap.GetNetwork().Interrupt();
+    
+    
+    
 }
 
 #endif
@@ -2001,12 +2012,17 @@ void Platform::InitialiseInterrupts()
 	// 0.853us resolution on the SAM E70 (150MHz clock)
 #if __LPC17xx__
 
-    static const uint32_t res = 1200000;//Resolution for interrupt: 1.2us
+    //LPC has 32bit timers
+    
+    //Using the same 128 divisor (as also specified in DDA) gives
+    //LPC Timers default to /4 -->  (SystemCoreClock/4)
+    //
+    uint32_t res = (VARIANT_MCK/128);// 1.28us for 100MHz (LPC1768) and 1.067us for 120MHz (LPC1769)
+    
     //Start a free running Timer using Match Registers 0 and 1 to generate interrupts
     LPC_SC->PCONP |= ((uint32_t)1<<SBIT_PCTIM0); // Ensure the Power bit is set for the Timer
     STEP_TC->MCR = 0; //disable all MRx interrupts
-    //STEP_TC->PR   = getPrescalarForUs(PCLK_TIMER0); // Prescalar for ~1us
-    STEP_TC->PR  = getPclk(PCLK_TIMER0)/res - 1;
+    STEP_TC->PR   =  (getPclk(PCLK_TIMER0)/res) - 1; // Set the LPC Prescaler (i.e. TC increment every 32 TimerClock Ticks)
     STEP_TC->TC  = 0x00;  // Restart the Timer Count
     NVIC_SetPriority(STEP_TC_IRQN, NvicPriorityStep);        // set high priority for this IRQ; it's time-critical
     NVIC_EnableIRQ(STEP_TC_IRQN);
@@ -2028,7 +2044,30 @@ void Platform::InitialiseInterrupts()
 
     
 #if HAS_LWIP_NETWORKING
-	pmc_enable_periph_clk(NETWORK_TC_ID);
+
+#if __LPC17xx__
+
+    //Start a Timer using Match Registers 0 generate interrupts
+    LPC_SC->PCONP |= ((uint32_t)1<<SBIT_PCTIM1); // Ensure the Power bit is set for the Timer
+    NETWORK_TC->MCR = (1<<SBIT_MR0I) | (1<<SBIT_MR0R);     // Int on MR0 match and Reset Timer on MR0 match
+
+    NETWORK_TC->PR   =  getPrescalarForUs(PCLK_TIMER1); // Prescalar for ~1us... every 1us TC is incremented
+    NETWORK_TC->MR0 = 62500; //interrupt every 62500us = 16Hz
+    NETWORK_TC->TC  = 0x00;  // Restart the Timer Count
+    
+    NVIC_SetPriority(NETWORK_TC_IRQN, NvicPriorityNetworkTick); //Timer Priority
+    NVIC_EnableIRQ(NETWORK_TC_IRQN);
+    
+    NETWORK_TC->TCR  = (1 <<SBIT_CNTEN); //Start Timer
+
+    
+    // Set up the Ethernet interface priority here to because we have access to the priority definitions
+    NVIC_SetPriority(ENET_IRQn, NvicPriorityEthernet); //enet interrupt priority
+    
+    
+#else
+    
+    pmc_enable_periph_clk(NETWORK_TC_ID);
 # if SAME70
 	// Timer interrupt to keep the networking timers running (called at 18Hz, which is almost as low as we can get because the timer is 16-bit)
 	tc_init(NETWORK_TC, NETWORK_TC_CHAN, TC_CMR_WAVE | TC_CMR_WAVSEL_UP_RC | TC_CMR_TCCLKS_TIMER_CLOCK4);
@@ -2052,7 +2091,11 @@ void Platform::InitialiseInterrupts()
 # else
 	NVIC_SetPriority(EMAC_IRQn, NvicPriorityEthernet);
 # endif
+
 #endif
+    
+    
+#endif //HAS_LWIP_NETWORKING
     
     
 #if __LPC17xx__
@@ -2255,32 +2298,46 @@ void Platform::Diagnostics(MessageType mtype)
     //extern unsigned int Image$$RW_IRAM1$$ZI$$Limit;
     extern unsigned int Image$$RW_IRAM2$$Base;
     extern unsigned int Image$$RW_IRAM2$$ZI$$Limit;
-    extern unsigned int Image$$RW_IRAM3$$Base;
-    extern unsigned int Image$$RW_IRAM3$$ZI$$Limit;
-    
+
     MessageF(mtype, "AHB0 Static ram used: %d\n", (unsigned int)&Image$$RW_IRAM2$$ZI$$Limit -(unsigned int)&Image$$RW_IRAM2$$Base);
-    MessageF(mtype, "AHB1 Static ram used: %d\n", (unsigned int)&Image$$RW_IRAM3$$ZI$$Limit -(unsigned int)&Image$$RW_IRAM3$$Base);
-    
     uint32_t ahb0_static = (unsigned int)&Image$$RW_IRAM2$$ZI$$Limit -(unsigned int)&Image$$RW_IRAM2$$Base;
-    uint32_t ahb1_static = (unsigned int)&Image$$RW_IRAM3$$ZI$$Limit -(unsigned int)&Image$$RW_IRAM3$$Base;
     //Dynamic Memory (free and total available)
     uint32_t ahb0_total = 0;
     uint32_t ahb0_free = 0 ;
+    AHB0.debug(ahb0_total, ahb0_free);
+
+    MessageF(mtype, "AHB0 Dynamic ram used: %d/%d\n", (unsigned int)(ahb0_total-ahb0_free), (unsigned int)ahb0_total);
+
+#if defined(COMBINE_AHBRAM)
+    //nothing to do here
+    
+#else
+    //read AHB1 values
+    extern unsigned int Image$$RW_IRAM3$$Base;
+    extern unsigned int Image$$RW_IRAM3$$ZI$$Limit;
+
+    MessageF(mtype, "AHB1 Static ram used: %d\n", (unsigned int)&Image$$RW_IRAM3$$ZI$$Limit -(unsigned int)&Image$$RW_IRAM3$$Base);
+    uint32_t ahb1_static = (unsigned int)&Image$$RW_IRAM3$$ZI$$Limit -(unsigned int)&Image$$RW_IRAM3$$Base;
+    //Dynamic Memory (free and total available)
     uint32_t ahb1_total = 0;
     uint32_t ahb1_free = 0 ;
-    
-    AHB0.debug(ahb0_total, ahb0_free);
     AHB1.debug(ahb1_total, ahb1_free);
-    
-    MessageF(mtype, "AHB0 Dynamic ram used: %d/%d\n", (unsigned int)(ahb0_total-ahb0_free), (unsigned int)ahb0_total);
     MessageF(mtype, "AHB1 Dynamic ram used: %d/%d\n", (unsigned int)(ahb1_total-ahb1_free), (unsigned int)ahb1_total);
+
+    
+#endif
+    
+    
+    
+    
     
     uint32_t main_usage = (&_end - ramstart)+mi.uordblks+currentStack;// Static + dynamic + stack
     MessageF(mtype, "-- RAM Totals --\n");
     MessageF(mtype, "Main RAM: %ld/%ld (%ld free)\n", (uint32_t)(&_end - ramstart)+mi.uordblks+currentStack, (uint32_t)(32*1024), (uint32_t)(32*1024 - main_usage));
     MessageF(mtype, "AHB0 RAM: %ld/%ld (%ld free)\n", (uint32_t)(ahb0_total-ahb0_free+ahb0_static), (uint32_t)ahb0_total+ahb0_static, (uint32_t)ahb0_free);
+#ifndef COMBINE_AHBRAM
     MessageF(mtype, "AHB1 RAM: %ld/%ld (%ld free)\n", (uint32_t)(ahb1_total-ahb1_free+ahb1_static), (uint32_t)ahb1_total+ahb1_static, (uint32_t)ahb1_free);
-
+#endif
 
 #endif
     
@@ -2477,10 +2534,13 @@ void Platform::Diagnostics(MessageType mtype)
     //Print out our Special Pins Available:
     MessageF(mtype, "\n=== GPIO Special Pins available === (i.e. with M42)\nLogicalPin - PhysicalPin\n");
     for(size_t i=0; i<ARRAY_SIZE(SpecialPinMap); i++){
-        uint8_t portNumber =  (SpecialPinMap[i]>>5);  //Divide the pin number by 32 go get the PORT number
-        uint8_t pinNumber  =   SpecialPinMap[i] & 0x1f;  //lower 5-bits contains the bit number of a 32bit port
+        
+        if(SpecialPinMap[i] != NoPin){
+            uint8_t portNumber =  (SpecialPinMap[i]>>5);  //Divide the pin number by 32 go get the PORT number
+            uint8_t pinNumber  =   SpecialPinMap[i] & 0x1f;  //lower 5-bits contains the bit number of a 32bit port
 
-        MessageF(mtype, " %d - P%d_%d %s\n", (60+i), portNumber, pinNumber, ((g_APinDescription[SpecialPinMap[i]].ulPinAttribute & PIN_ATTR_PWM)==PIN_ATTR_PWM)?"(HW PWM)":"" );
+            MessageF(mtype, " %d - P%d_%d %s\n", (60+i), portNumber, pinNumber, ((g_APinDescription[SpecialPinMap[i]].ulPinAttribute & PIN_ATTR_PWM)==PIN_ATTR_PWM)?"(HW PWM)":"" );
+        }
     }
     //MessageF(mtype, "\n");
     
@@ -3886,7 +3946,7 @@ bool Platform::ConfigureLogging(GCodeBuffer& gb, const StringRef& reply)
 			// Start logging
 			if (logger == nullptr)
 			{
-				logger = new RAM2 Logger();
+				logger = new LOG_RAM Logger();
 			}
 			else
 			{
@@ -4703,7 +4763,7 @@ void STEP_TC_HANDLER()
     //find which Match Register triggered the interrupt
     if (regval & (1 << SBIT_MRI0_IFM)) //Interrupt flag for match channel 0.
     {
-        STEP_TC->IR = (1<<SBIT_MRI0_IFM); //clear interrupt on MR0
+        STEP_TC->IR |= (1<<SBIT_MRI0_IFM); //clear interrupt on MR0
         STEP_TC->MCR  &= ~(1<<SBIT_MR0I); //Disable Int on MR0
         
 # ifdef MOVE_DEBUG
@@ -4715,7 +4775,7 @@ void STEP_TC_HANDLER()
     
     if (regval & (1 << SBIT_MRI1_IFM)) //Interrupt flag for match channel 1.
     {
-        STEP_TC->IR = (1<<SBIT_MRI1_IFM); //clear interrupt
+        STEP_TC->IR |= (1<<SBIT_MRI1_IFM); //clear interrupt
         STEP_TC->MCR  &= ~(1<<SBIT_MR1I); //Disable Int on MR1
 # ifdef SOFT_TIMER_DEBUG
         ++numSoftTimerInterruptsExecuted;

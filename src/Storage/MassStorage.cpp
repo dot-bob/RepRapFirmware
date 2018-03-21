@@ -56,7 +56,7 @@ void MassStorage::Init()
 {
 	for (size_t i = 0; i < NumFileWriteBuffers; ++i)
 	{
-		freeWriteBuffers = new RAM1 FileWriteBuffer(freeWriteBuffers);
+		freeWriteBuffers = new FILEWRITEBUFFER FileWriteBuffer(freeWriteBuffers);
 	}
 
 	for (size_t card = 0; card < NumSdCards; ++card)

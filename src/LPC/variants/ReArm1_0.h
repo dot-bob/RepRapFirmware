@@ -1,5 +1,5 @@
-#ifndef AZTEEGX5MINI_H__
-#define AZTEEGX5MINI_H__
+#ifndef REARM_H__
+#define REARM_H__
 
 
 //Config for ReArm v1.0
@@ -23,7 +23,6 @@
 
 
 
-
 // The physical capabilities of the machine
 
 // The number of drives in the machine, including X, Y, and Z plus extruder drives
@@ -35,10 +34,10 @@ const size_t DRIVES = 5;
 
 // The number of heaters in the machine
 // 0 is the heated bed even if there isn't one.
-const size_t Heaters = 3; //ReArm (Bed + Hotend1 + Hotend2)
+const size_t Heaters = 2; //ReArm (Bed + Hotend1) // set to 3 if using 2nd heater and update macro below, and  Tempsense and heat pins below and remove(chance to another) cooling fan pin too
 
 // Initialization macro used in statements needing to initialize values in arrays of size HEATERS.  E.g.,
-#define HEATERS_(a,b,c,d,e,f,g,h) { a,b,c }
+#define HEATERS_(a,b,c,d,e,f,g,h) { a,b }
 
 const size_t MinAxes = 3;						// The minimum and default number of axes
 const size_t MaxAxes = 5;						// The maximum number of movement axes in the machine, usually just X, Y and Z, <= DRIVES
@@ -81,14 +80,14 @@ const Pin END_STOP_PINS[DRIVES] = { P1_25, P1_27, P1_28, NoPin, NoPin}; // E sto
 
 // Analogue pin numbers
 //                                            Bed    H1
-const Pin TEMP_SENSE_PINS[Heaters] = HEATERS_(P0_24, P0_23, P0_25, d, e, f, g, h);
+const Pin TEMP_SENSE_PINS[Heaters] = HEATERS_(P0_24, P0_23, /*P0_25*/c, d, e, f, g, h);
 
 
 // Heater outputs
 
 // Note: P2_0 to P2_5 is hardware PWM capable, P2_7 is not
 
-const Pin HEAT_ON_PINS[Heaters] = HEATERS_(P2_7, P2_5, P2_4, d, e, f, g, h); // bed, h0
+const Pin HEAT_ON_PINS[Heaters] = HEATERS_(P2_7, P2_5, /*P2.4*/c, d, e, f, g, h); // bed, h0
 
 // Default thermistor betas
 const float BED_R25 = 100000.0;

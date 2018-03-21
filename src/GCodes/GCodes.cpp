@@ -55,17 +55,17 @@ GCodes::GCodes(Platform& p) :
 	serialInput = new StreamGCodeInput(SERIAL_MAIN_DEVICE);
 	auxInput = new StreamGCodeInput(SERIAL_AUX_DEVICE);
 
-	httpGCode = new GCodeBuffer("http", HttpMessage, false);
-	telnetGCode = new GCodeBuffer("telnet", TelnetMessage, true);
-	fileGCode = new GCodeBuffer("file", GenericMessage, true);
-	serialGCode = new GCodeBuffer("serial", UsbMessage, true);
-	auxGCode = new GCodeBuffer("aux", LcdMessage, false);
-	daemonGCode = new GCodeBuffer("daemon", GenericMessage, false);
+	httpGCode = new GCODEBUFFER_RAM GCodeBuffer("http", HttpMessage, false);
+	telnetGCode = new GCODEBUFFER_RAM GCodeBuffer("telnet", TelnetMessage, true);
+	fileGCode = new GCODEBUFFER_RAM GCodeBuffer("file", GenericMessage, true);
+	serialGCode = new GCODEBUFFER_RAM GCodeBuffer("serial", UsbMessage, true);
+	auxGCode = new GCODEBUFFER_RAM GCodeBuffer("aux", LcdMessage, false);
+	daemonGCode = new GCODEBUFFER_RAM GCodeBuffer("daemon", GenericMessage, false);
 #if SUPPORT_12864_LCD
 	lcdGCode = new GCodeBuffer("lcd", GenericMessage, false);
 #endif
 	queuedGCode = new GCodeBuffer("queue", GenericMessage, false);
-	autoPauseGCode = new GCodeBuffer("autopause", GenericMessage, false);
+	autoPauseGCode = new GCODEBUFFER_RAM GCodeBuffer("autopause", GenericMessage, false);
 	codeQueue = new GCodeQueue();
 }
 

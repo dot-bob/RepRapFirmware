@@ -72,11 +72,11 @@ RepRap::RepRap() : toolList(nullptr), currentTool(nullptr), lastWarningMillis(0)
 	displayMessageBox(false), boxSeq(0)
 {
 	OutputBuffer::Init();
-	platform = new RAM1 Platform();
-	network = new RAM2 Network(*platform);
-	gCodes = new RAM1 GCodes(*platform);
-	move = new Move();
-	heat = new /*RAM2*/ Heat(*platform);
+	platform = new PLATFORM_RAM Platform();
+	network = new NETWORK_RAM Network(*platform);
+	gCodes = new GCODES_RAM GCodes(*platform);
+	move = new MOVE_RAM Move();
+	heat = new HEAT_RAM Heat(*platform);
 
 #if SUPPORT_ROLAND
 	roland = new Roland(*platform);
@@ -91,7 +91,7 @@ RepRap::RepRap() : toolList(nullptr), currentTool(nullptr), lastWarningMillis(0)
  	display = new Display();
 #endif
 
-	printMonitor = new RAM2 PrintMonitor(*platform, *gCodes);
+	printMonitor = new PM_RAM PrintMonitor(*platform, *gCodes);
 
 	SetPassword(DEFAULT_PASSWORD);
 	message[0] = 0;

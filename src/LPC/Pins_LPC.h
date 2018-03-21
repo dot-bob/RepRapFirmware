@@ -2,7 +2,8 @@
 #define PINS_DUET_H__
 
 
-//Current settings based on Azteeg X5 Mini V1.1
+
+#include "lpc_mem_defs.h"
 
 
 //NOTES:
@@ -19,18 +20,15 @@
 //TODO:: implement firmware update
 const size_t NumFirmwareUpdateModules = 0;
 
-//Aliases for ram banks when using "new"
-#define RAM1 (AHB0)
-#define RAM2 (AHB1)
-#define STATICRAM0 __attribute__ ((section ("AHBSRAM0")))
-#define STATICRAM1 __attribute__ ((section ("AHBSRAM1")))
+
+
 
 
 
 #define FIRMWARE_NAME "RepRapFirmware for LPC17xx based Boards"
 
 // Features definition
-#define HAS_LWIP_NETWORKING		0
+#define HAS_LWIP_NETWORKING		1
 #define HAS_CPU_TEMP_SENSOR		0				// enabling the CPU temperature sensor disables Due pin 13 due to bug in SAM3X
 #define HAS_HIGH_SPEED_SD		0
 #define HAS_SMART_DRIVERS		0
@@ -55,15 +53,24 @@ constexpr size_t NumExtraHeaterProtections = 4;
 # include "variants/Smoothieboard1.h"
 #elif defined(__REARM__)
 # include "variants/ReArm1_0.h"
+#elif defined(__MBED__)
+//Only used for debugging just use smoothie for now
+# include "variants/Smoothieboard1.h"
 #else
+
 # error "Unknown LPC Variant"
 #endif
 
 const size_t NUM_SERIAL_CHANNELS = 2;
 // Use TX0/RX0 for the auxiliary serial line
-#define SERIAL_MAIN_DEVICE Serial //USD
-#define SERIAL_AUX_DEVICE Serial0 //TX0/RX0
 
+#if defined(__MBED__)
+#define SERIAL_MAIN_DEVICE Serial0 //TX0/RX0 connected to via seperate USB
+#define SERIAL_AUX_DEVICE Serial //USB pins unconnected.
+#else
+#define SERIAL_MAIN_DEVICE Serial //USB
+#define SERIAL_AUX_DEVICE Serial0 //TX0/RX0
+#endif
 
 
 
@@ -82,6 +89,7 @@ const int HighestLogicalPin = 60 + ARRAY_SIZE(SpecialPinMap) - 1;		// highest lo
 #define STEP_TC_PCONPBIT    SBIT_PCTIM0
 #define STEP_TC_PCLKBIT     PCLK_TIMER0
 #define STEP_TC_TIMER       TIMER0
+
 
 #define NETWORK_TC            (LPC_TIM1)
 #define NETWORK_TC_IRQN       TIMER1_IRQn

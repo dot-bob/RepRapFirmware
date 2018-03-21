@@ -482,7 +482,7 @@ FILESEM    Files[_FS_SHARE];    /* File lock semaphores */
 #define    FREE_BUF()
 
 #elif _USE_LFN == 1            /* LFN with static LFN working buffer */
-static WCHAR LfnBuf[_MAX_LFN+1];
+static WCHAR LfnBuf[_MAX_LFN+1] __attribute__ ((section ("AHBSRAM0"))); //SD:: Put buffer in AHB0
 #define    DEF_NAMEBUF            BYTE sfn[12]
 #define INIT_BUF(dobj)        { (dobj).fn = sfn; (dobj).lfn = LfnBuf; }
 #define    FREE_BUF()
