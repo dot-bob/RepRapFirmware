@@ -1995,9 +1995,11 @@ void Platform::InitialiseInterrupts()
 	// Set the tick interrupt to the highest priority. We need to to monitor the heaters and kick the watchdog.
 	NVIC_SetPriority(SysTick_IRQn, NvicPrioritySystick);		// set priority for tick interrupts
 
-#if SAM4E || SAME70 || __LPC17xx__
+#if SAM4E || SAME70
 	NVIC_SetPriority(UART0_IRQn, NvicPriorityPanelDueUart);		// set priority for UART interrupt
 	NVIC_SetPriority(UART1_IRQn, NvicPriorityWiFiUart);			// set priority for WiFi UART interrupt
+#elif __LPC17xx__
+    NVIC_SetPriority(UART0_IRQn, NvicPriorityPanelDueUart);        // set priority for UART interrupt
 #elif SAM4S
 	NVIC_SetPriority(UART1_IRQn, NvicPriorityPanelDueUart);		// set priority for UART interrupt
 #else
@@ -2018,15 +2020,15 @@ void Platform::InitialiseInterrupts()
 
     //LPC has 32bit timers
     
-    //Using the same 128 divisor (as also specified in DDA) gives
+    //Using the same 128 divisor (as also specified in DDA)
     //LPC Timers default to /4 -->  (SystemCoreClock/4)
     //
     uint32_t res = (VARIANT_MCK/128);// 1.28us for 100MHz (LPC1768) and 1.067us for 120MHz (LPC1769)
     
     //Start a free running Timer using Match Registers 0 and 1 to generate interrupts
-    LPC_SC->PCONP |= ((uint32_t)1<<SBIT_PCTIM0); // Ensure the Power bit is set for the Timer
+    LPC_SC->PCONP |= ((uint32_t) 1<<SBIT_PCTIM0); // Ensure the Power bit is set for the Timer
     STEP_TC->MCR = 0; //disable all MRx interrupts
-    STEP_TC->PR   =  (getPclk(PCLK_TIMER0)/res) - 1; // Set the LPC Prescaler (i.e. TC increment every 32 TimerClock Ticks)
+    STEP_TC->PR   =  (getPclk(PCLK_TIMER0) / res) - 1; // Set the LPC Prescaler (i.e. TC increment every 32 TimerClock Ticks)
     STEP_TC->TC  = 0x00;  // Restart the Timer Count
     NVIC_SetPriority(STEP_TC_IRQN, NvicPriorityStep);        // set high priority for this IRQ; it's time-critical
     NVIC_EnableIRQ(STEP_TC_IRQN);
@@ -4879,7 +4881,7 @@ void STEP_TC_HANDLER()
 	}
 #ifdef __LPC17xx__
     STEP_TC->MR0 = tim;
-    STEP_TC->MCR  |= (1<<SBIT_MR0I);     // Int on MR0 match
+    STEP_TC->MCR  |= (1<<SBIT_MR0I);     // Enable Int on MR0 match
 #else
 
 	STEP_TC->TC_CHANNEL[STEP_TC_CHAN].TC_RA = tim;					// set up the compare register
