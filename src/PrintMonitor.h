@@ -25,8 +25,8 @@ Licence: GPL
 const FilePosition GCODE_HEADER_SIZE = 20000uL;		// How many bytes to read from the header - I (DC) have a Kisslicer file with a layer height comment 14Kb from the start
 const FilePosition GCODE_FOOTER_SIZE = 400000uL;	// How many bytes to read from the footer
 
-#if SAM4E || SAM4S
-const size_t GCODE_READ_SIZE = 4096;				// How many bytes to read in one go in GetFileInfo() (should be a multiple of 512 for read efficiency)
+#if SAM4E || SAM4S || SAME70
+const size_t GCODE_READ_SIZE = 2048;				// How many bytes to read in one go in GetFileInfo() (should be a multiple of 512 for read efficiency)
 #else
 const size_t GCODE_READ_SIZE = 1024;				// How many bytes to read in one go in GetFileInfo() (should be a multiple of 512 for read efficiency)
 #endif
@@ -42,6 +42,7 @@ const float FIRST_LAYER_SPEED_FACTOR = 0.25;		// First layer speed factor compar
 
 const uint32_t PRINTMONITOR_UPDATE_INTERVAL = 200;	// Update interval in milliseconds
 const uint32_t MAX_FILEINFO_PROCESS_TIME = 200;		// Maximum time to spend polling for file info in each call
+const uint32_t MaxFileParseInterval = 4000;			// Maximum interval between repeat requests to parse a file
 
 enum PrintEstimationMethod
 {
@@ -61,13 +62,14 @@ struct GCodeFileInfo
 	float filamentNeeded[MaxExtruders];
 	unsigned int numFilaments;
 	float layerHeight;
-	char generatedBy[50];
+	String<50> generatedBy;
 };
 
 enum FileParseState
 {
 	notParsing,
 	parsingHeader,
+	seeking,
 	parsingFooter
 };
 
@@ -86,7 +88,6 @@ class PrintMonitor
 		// The following two methods need to be called until they return true - this may take a few runs
 		bool GetFileInfo(const char *directory, const char *fileName, GCodeFileInfo& info);
 		bool GetFileInfoResponse(const char *filename, OutputBuffer *&response);
-		void StopParsing(const char *filename);
 
 		// Return an estimate in seconds based on a specific estimation method
 		float EstimateTimeLeft(PrintEstimationMethod method) const;
@@ -99,13 +100,14 @@ class PrintMonitor
 		float GetFirstLayerDuration() const;
 		float GetFirstLayerHeight() const;
 
-		const char *GetPrintingFilename() const { return (isPrinting) ? filenameBeingPrinted : nullptr; }
+		const char *GetPrintingFilename() const { return (isPrinting) ? filenameBeingPrinted.c_str() : nullptr; }
 
 	private:
 		Platform& platform;
 		GCodes& gCodes;
 		uint32_t longWait;
 		uint32_t lastUpdateTime;
+		uint32_t lastFileParseTime;
 
 		// Information/Events concerning the file being printed
 		void WarmUpComplete();
@@ -129,9 +131,10 @@ class PrintMonitor
 		float layerEstimatedTimeLeft;
 
 		// We parse G-Code files in multiple stages. These variables hold the required information
-		volatile FileParseState parseState;
-		char filenameBeingParsed[MaxFilenameLength];
+		FileParseState parseState;
+		String<MaxFilenameLength> filenameBeingParsed;
 		FileStore *fileBeingParsed;
+		FilePosition nextSeekPos;
 		GCodeFileInfo parsedFileInfo;
 
 		char fileOverlap[GCODE_OVERLAP_SIZE];
@@ -139,13 +142,14 @@ class PrintMonitor
 
 		bool printingFileParsed;
 		GCodeFileInfo printingFileInfo;
-		char filenameBeingPrinted[MaxFilenameLength];
+		String<MaxFilenameLength> filenameBeingPrinted;
 
 		// G-Code parser methods
 		bool FindHeight(const char* buf, size_t len, float& height) const;
 		bool FindFirstLayerHeight(const char* buf, size_t len, float& layerHeight) const;
 		bool FindLayerHeight(const char* buf, size_t len, float& layerHeight) const;
-		unsigned int FindFilamentUsed(const char* buf, size_t len, float *filamentUsed, unsigned int maxFilaments) const;
+		bool FindSlicerInfo(const char* buf, size_t len, const StringRef& generatedBy) const;
+		unsigned int FindFilamentUsed(const char* buf, size_t len, float *filamentUsed, size_t maxFilaments) const;
 
 		uint32_t accumulatedParseTime, accumulatedReadTime, accumulatedSeekTime;
 };

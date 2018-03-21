@@ -8,6 +8,8 @@
 //*************************************************************************************
 
 #include "GCodeBuffer.h"
+
+#include "GCodeInput.h"
 #include "Platform.h"
 #include "RepRap.h"
 
@@ -388,6 +390,7 @@ void GCodeBuffer::SetFinished(bool f)
 		}
 		else
 		{
+			machineState->useMachineCoordinates = false;		// G53 does not persist beyond the current line
 			Init();
 		}
 	}
@@ -443,13 +446,14 @@ float GCodeBuffer::GetFValue()
 }
 
 // Get a colon-separated list of floats after a key letter
+// If doPad is true then we allow just one element to be given, in which case we fill all elements with that value
 const void GCodeBuffer::GetFloatArray(float arr[], size_t& returnedLength, bool doPad)
 {
 	if (readPointer >= 0)
 	{
 		size_t length = 0;
 		bool inList = true;
-		while(inList)
+		while (inList)
 		{
 			if (length >= returnedLength)		// array limit has been set in here
 			{
@@ -473,7 +477,7 @@ const void GCodeBuffer::GetFloatArray(float arr[], size_t& returnedLength, bool 
 		// Special case if there is one entry and returnedLength requests several. Fill the array with the first entry.
 		if (doPad && length == 1 && returnedLength > 1)
 		{
-			for(size_t i = 1; i < returnedLength; i++)
+			for (size_t i = 1; i < returnedLength; i++)
 			{
 				arr[i] = arr[0];
 			}
@@ -928,6 +932,7 @@ bool GCodeBuffer::PushState()
 	ms->runningM501 = machineState->runningM501;
 	ms->runningM502 = machineState->runningM502;
 	ms->volumetricExtrusion = false;
+	ms->useMachineCoordinates = false;
 	ms->messageAcknowledged = false;
 	ms->waitingForAcknowledgement = false;
 	machineState = ms;
@@ -948,6 +953,19 @@ bool GCodeBuffer::PopState()
 	machineState = ms->previous;
 	GCodeMachineState::Release(ms);
 	return true;
+}
+
+// Abort execution of any files or macros being executed, returning true if any files were closed
+void GCodeBuffer::AbortFile(FileGCodeInput* fileInput)
+{
+	do
+	{
+		if (machineState->fileState.IsLive())
+		{
+			fileInput->Reset(machineState->fileState);
+			machineState->fileState.Close();
+		}
+	} while (PopState());							// abandon any macros
 }
 
 // Return true if this source is executing a file macro

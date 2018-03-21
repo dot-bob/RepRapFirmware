@@ -29,9 +29,10 @@ class IoPort
 public:
 	IoPort();
 	void Clear();
-	bool Set(LogicalPin lp, PinAccess access);
+	bool Set(LogicalPin lp, PinAccess access, bool pInvert);
 
 	LogicalPin GetLogicalPin() const { return logicalPort; }
+	LogicalPin GetLogicalPin(bool& pInvert) const { pInvert = invert; return logicalPort; }
 	void WriteDigital(bool high) const { if (pin != NoPin) { WriteDigital(pin, (invert) ? !high : high); } }
 
 	// Low level port access
@@ -53,7 +54,7 @@ public:
 	PwmPort();
 	void SetFrequency(float freq);
 	float GetFrequency() const { return (float)frequency; }
-	void WriteAnalog(float pwm) const { if (pin != NoPin) { IoPort::WriteAnalog(pin, ((invert) ? 1.0 - pwm : pwm), frequency); } }
+	void WriteAnalog(float pwm) const;
 
 private:
 	uint16_t frequency;

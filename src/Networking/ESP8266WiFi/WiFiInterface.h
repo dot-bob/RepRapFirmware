@@ -44,8 +44,8 @@ public:
 	void Exit() override;
 	void Spin(bool full) override;
 	void Diagnostics(MessageType mtype) override;
-	void Start() override;
-	void Stop() override;
+	void Start();
+	void Stop();
 
 	GCodeResult EnableInterface(int mode, const StringRef& ssid, const StringRef& reply) override;			// enable or disable the network
 	GCodeResult EnableProtocol(NetworkProtocol protocol, int port, int secure, const StringRef& reply) override;
@@ -65,7 +65,6 @@ public:
 
 	void OpenDataPort(Port port) override;
 	void TerminateDataPort() override;
-	void DataPortClosing() override;
 
 	// The remaining functions are specific to the WiFi version
 	GCodeResult HandleWiFiCode(int mcode, GCodeBuffer &gb, const StringRef& reply, OutputBuffer*& longReply);
@@ -117,6 +116,7 @@ private:
 
 	void SendListenCommand(Port port, NetworkProtocol protocol, unsigned int maxConnections);
 	void GetNewStatus();
+	static const char* TranslateWiFiResponse(int32_t response);
 
 	static const char* TranslateEspResetReason(uint32_t reason);
 
@@ -158,7 +158,7 @@ private:
 	// For processing debug messages from the WiFi module
 	bool serialRunning;
 	bool debugPrintPending;
-	String<100> debugMessageBuffer;
+	String<150> debugMessageBuffer;
 };
 
 #endif

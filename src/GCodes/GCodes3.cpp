@@ -99,6 +99,20 @@ GCodeResult GCodes::SetPrintZProbe(GCodeBuffer& gb, const StringRef& reply)
 	return GCodeResult::ok;
 }
 
+// Deal with G60
+GCodeResult GCodes::SavePosition(GCodeBuffer& gb,const  StringRef& reply)
+{
+	const uint32_t sParam = (gb.Seen('S')) ? gb.GetUIValue() : 0;
+	if (sParam < ARRAY_SIZE(numberedRestorePoints))
+	{
+		SavePosition(numberedRestorePoints[sParam], gb);
+		return GCodeResult::ok;
+	}
+
+	reply.copy("Bad restore point number");
+	return GCodeResult::error;
+}
+
 // This handles G92. Return true if completed, false if it needs to be called again.
 GCodeResult GCodes::SetPositions(GCodeBuffer& gb)
 {
@@ -179,28 +193,43 @@ GCodeResult GCodes::OffsetAxes(GCodeBuffer& gb)
 #if SUPPORT_WORKPLACE_COORDINATES
 
 // Set workspace coordinates
-GCodeResult GCodes::GetSetWorkplaceCoordinates(GCodeBuffer& gb, const StringRef& reply)
+GCodeResult GCodes::GetSetWorkplaceCoordinates(GCodeBuffer& gb, const StringRef& reply, bool compute)
 {
 	if (gb.Seen('P'))
 	{
 		const uint32_t cs = gb.GetIValue();
-		if (cs < ARRAY_SIZE(workplaceCoordinates))
+		if (cs > 0 && cs <= NumCoordinateSystems)
 		{
 			bool seen = false;
 			for (size_t axis = 0; axis < numVisibleAxes; axis++)
 			{
 				if (gb.Seen(axisLetters[axis]))
 				{
-					workplaceCoordinates[cs][axis] = gb.GetFValue() * distanceScale;
-					seen = true;
+					const float coord = gb.GetFValue() * distanceScale;
+					if (!seen)
+					{
+						if (!LockMovementAndWaitForStandstill(gb))						// make sure the user coordinates are stable and up to date
+						{
+							return GCodeResult::notFinished;
+						}
+						seen = true;
+					}
+					workplaceCoordinates[cs - 1][axis] = (compute)
+														? currentUserPosition[axis] - coord + workplaceCoordinates[currentCoordinateSystem][axis]
+															: coord;
 				}
 			}
-			if (!seen)
+
+			if (seen)
 			{
-				reply.printf("Coordinates of workplace %" PRIu32 ":", cs);
+				ToolOffsetInverseTransform(moveBuffer.coords, currentUserPosition);		// update user coordinates in case we are using the workspace we just changed
+			}
+			else
+			{
+				reply.printf("Origin of workplace %" PRIu32 ":", cs);
 				for (size_t axis = 0; axis < numVisibleAxes; axis++)
 				{
-					reply.catf(" %c%.2f", axisLetters[axis], (double)workplaceCoordinates[cs][axis]);
+					reply.catf(" %c%.2f", axisLetters[axis], (double)workplaceCoordinates[cs - 1][axis]);
 				}
 			}
 			return GCodeResult::ok;
@@ -316,6 +345,7 @@ GCodeResult GCodes::SetOrReportZProbe(GCodeBuffer& gb, const StringRef &reply)
 	{
 		platform.SetZProbeType(gb.GetIValue());
 		seenType = true;
+		DoDwellTime(gb, 100);				// delay a little to allow the averaging filters to accumulate data from the new source
 	}
 
 	ZProbe params = platform.GetCurrentZProbeParameters();

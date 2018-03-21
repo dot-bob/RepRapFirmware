@@ -17,6 +17,7 @@ enum class GCodeState : uint8_t
 	normal,												// not doing anything and ready to process a new GCode
 
 	waitingForSpecialMoveToComplete,					// doing a special move, so we must wait for it to finish before processing another GCode
+	waitingForArcMoveToComplete,						// doing an arc move, so we must check whether it completes normally
 
 	probingToolOffset,
 
@@ -91,6 +92,7 @@ public:
 	float feedrate;
 	FileData fileState;
 	ResourceBitmap lockedResources;
+	const char *errorMessage;
 	GCodeState state;
 	uint8_t toolChangeParam;
 	int16_t newToolNumber;
@@ -102,6 +104,7 @@ public:
 		runningM501 : 1,
 		runningM502 : 1,
 		volumetricExtrusion : 1,
+		useMachineCoordinates : 1,		// true if seen G53 on this line of GCode
 		// Caution: these next 3 will be modified out-of-process when we use RTOS, so they will need to be individual bool variables
 		waitingForAcknowledgement : 1,
 		messageAcknowledged : 1,
