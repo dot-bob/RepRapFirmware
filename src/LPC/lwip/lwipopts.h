@@ -39,20 +39,38 @@
  *
  */
 
-#if defined(__LPC17xx__)
-
-#include "LPC/lwip/lwipopts.h"
-
-#else
-
-
-
-
 #ifndef __LWIPOPTS_H__
 #define __LWIPOPTS_H__
 
 /* Include ethernet configuration first */
-#include "conf_eth.h"
+#include "arch/cc.h"
+#include "arch/perf.h"
+
+#include "lpc_emac_config.h"
+
+#define LWIP_DEBUG
+
+//#define UDP_LPC_EMAC                LWIP_DBG_ON //LPC driver_debugging
+#define UDP_LPC_EMAC                LWIP_DBG_OFF //LPC driver_debugging
+
+//#define MEMP_SEPARATE_POOLS  1
+
+//custom pointer to the ram heap (in AHB1)
+extern uint8_t lwip_ram_heap[];
+#define LWIP_RAM_HEAP_POINTER       lwip_ram_heap
+
+
+//#define IP_FRAG_USES_STATIC_BUF 0
+//#define LWIP_NETIF_TX_SINGLE_PBUF 0
+
+
+/** ETH_PAD_SIZE: number of bytes added before the ethernet header to ensure
+ * alignment of payload after that header. Since the header is 14 bytes long,
+ * without this padding e.g. addresses in the IP header will not be aligned
+ * on a 32-bit boundary, so setting this to 2 can speed up 32-bit-platforms.
+ */
+//#define ETH_PAD_SIZE                2
+#define ETH_PAD_SIZE                0
 
 /*
    -----------------------------------------------
@@ -110,7 +128,8 @@
  * MEM_SIZE: the size of the heap memory. If the application will send
  * a lot of data that needs to be copied, this should be set high.
  */
-#define MEM_SIZE                		12288		// 8192 works too but then lwip reports mem errors. sadly "max" isn't working
+#define MEM_SIZE                        6040        //this seems to the min before we start getting mem_heap errors
+
 
 /**
  * MEMP_NUM_UDP_PCB: the number of UDP protocol control blocks. One
@@ -150,6 +169,7 @@
  * LWIP_NETIF_TX_SINGLE_PBUF==0 and only has to be > 1 with DMA-enabled MACs
  * where the packet is not yet sent when netif->output returns.
  */
+
 #define MEMP_NUM_FRAG_PBUF              6
 
 /**
@@ -174,12 +194,13 @@
 /**
  * PBUF_POOL_SIZE: the number of buffers in the pbuf pool.
  */
-#define PBUF_POOL_SIZE                  (GMAC_RX_BUFFERS + 4)
+//#define PBUF_POOL_SIZE                  (LPC_NUM_BUFF_RXDESCS + 4)
+#define PBUF_POOL_SIZE                  (LPC_NUM_BUFF_RXDESCS + 3)
 
 /**
  * PBUF_POOL_BUFSIZE: the size of each pbuf in the pbuf pool.
  */
-#define PBUF_POOL_BUFSIZE               GMAC_FRAME_LENTGH_MAX
+#define PBUF_POOL_BUFSIZE               LPC_FRAME_LENGTH_MAX
 
 /*
    ----------------------------------
@@ -196,14 +217,20 @@
 
 /* --------- IGMP options ---------- */
 #define LWIP_IGMP                   1
+
+#if USE_MDNS==1
 #define LWIP_MDNS_RESPONDER         1
 #define LWIP_NUM_NETIF_CLIENT_DATA  (LWIP_MDNS_RESPONDER)
+#else
+#define LWIP_MDNS_RESPONDER         0
+#endif
+
 
 #ifdef __SAME70Q21__
 extern uint32_t trueRandom(void);
 # define LWIP_RAND					trueRandom
 #else
-# define LWIP_RAND					random
+# define LWIP_RAND					rand
 #endif
 
 
@@ -238,7 +265,9 @@ extern uint32_t trueRandom(void);
  * when opening a connection. For the transmit size, this MSS sets
  * an upper limit on the MSS advertised by the remote host.
  */
+
 #define TCP_MSS                 1460
+
 
 /**
  * TCP_WND: The size of a TCP window.  This must be at least
@@ -257,7 +286,6 @@ extern uint32_t trueRandom(void);
  * as much as (2 * TCP_SND_BUF/TCP_MSS) for things to work.
  */
 #define TCP_SND_QUEUELEN        ((4 * (TCP_SND_BUF) + (TCP_MSS - 1))/(TCP_MSS))
-
 /*
    ------------------------------------------------
    ---------- Network Interfaces options ----------
@@ -342,7 +370,7 @@ extern uint32_t trueRandom(void);
 
 #define LWIP_NOASSERT					0
 
-#define LWIP_DEBUG
+//#define LWIP_DEBUG
 #define LWIP_DBG_MIN_LEVEL              LWIP_DBG_LEVEL_ALL
 #define LWIP_DBG_TYPES_ON               LWIP_DBG_ON
 
@@ -384,6 +412,3 @@ extern uint32_t trueRandom(void);
 // \note For a list of all possible lwIP configurations, check http://lwip.wikia.com/wiki/Lwipopts.h
 
 #endif /* __LWIPOPTS_H__ */
-
-
-#endif//if __LPC17xx__

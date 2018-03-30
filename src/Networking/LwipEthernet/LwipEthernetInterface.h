@@ -13,6 +13,7 @@
 #include "RepRapFirmware.h"
 #include "MessageType.h"
 
+
 // We have 8 sockets available for Ethernet
 const size_t NumHttpSockets = 5;				// sockets 0-4 are for HTTP
 const SocketNumber FtpSocketNumber = 5;

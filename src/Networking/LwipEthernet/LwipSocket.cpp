@@ -412,9 +412,11 @@ size_t LwipSocket::Send(const uint8_t *data, size_t length)
 	}
 
 	const size_t bytesLeft = tcp_sndbuf(connectionPcb);
+
+
 	if (length != 0 && bytesLeft != 0)
 	{
-		// See how many bytes we can send
+        // See how many bytes we can send
 		size_t bytesToSend = length;
 		if (bytesLeft < length)
 		{
@@ -425,7 +427,16 @@ size_t LwipSocket::Send(const uint8_t *data, size_t length)
 		err_t err;
 		do
 		{
-			err = tcp_write(connectionPcb, data, bytesToSend, 0);
+
+#if defined(__LPC17xx__)
+            //SD:: Added TCP_WRITE_FLAG_COPY as was getting corrupted packets after 1st window..
+            //TODO:::not idea as this allocates new memory and copies the data.
+            //TODO::Moved the NetworkBuffer to Main RAM to allow for the extra increase of LWip memory in AHB SRAM to hold te copied data
+            
+            err = tcp_write(connectionPcb, data, bytesToSend, TCP_WRITE_FLAG_COPY);
+#else
+            err = tcp_write(connectionPcb, data, bytesToSend, 0);
+#endif
 			if (ERR_IS_FATAL(err))
 			{
 				Terminate();
@@ -442,6 +453,7 @@ size_t LwipSocket::Send(const uint8_t *data, size_t length)
 					return 0;
 				}
 				bytesToSend /= 2;
+
 			}
 		}
 		while (err == ERR_MEM);
@@ -457,7 +469,7 @@ size_t LwipSocket::Send(const uint8_t *data, size_t length)
 		// We could successfully send some data
 		whenWritten = millis();
 		unAcked += bytesToSend;
-
+        
 		UnlockLWIP();
 		return bytesToSend;
 	}

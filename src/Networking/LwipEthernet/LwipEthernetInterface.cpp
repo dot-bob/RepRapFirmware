@@ -22,8 +22,12 @@
 
 extern "C"
 {
+#if defined(__LPC17xx__)
+#include "EMAC/ethernet_lpc.h"
+#else
 #include "GMAC/ethernet_sam.h"
-
+#endif
+    
 #ifdef LWIP_STATS
 #include "lwip/stats.h"
 #endif
@@ -127,7 +131,7 @@ LwipEthernetInterface::LwipEthernetInterface(Platform& p) : platform(p), closeDa
 	// Create the sockets
 	for (size_t i : ARRAY_INDICES(sockets))
 	{
-		sockets[i] = new LwipSocket(this);
+		sockets[i] = new NETWORK_RAM LwipSocket(this);
 	}
 
 	// Initialise default ports
@@ -174,7 +178,9 @@ GCodeResult LwipEthernetInterface::EnableProtocol(NetworkProtocol protocol, int 
 			if (state == NetworkState::active)
 			{
 				StartProtocol(protocol);
+#if USE_MDNS==1
 				RebuildMdnsServices();
+#endif
 			}
 		}
 		ReportOneProtocol(protocol, reply);
@@ -345,18 +351,32 @@ void LwipEthernetInterface::Start()
 	{
 		const char *hostname = reprap.GetNetwork().GetHostname();
 
+        
 		// Allow the MAC address to be set only before LwIP is started...
-		ethernet_configure_interface(platform.GetDefaultMacAddress(), hostname);
-		init_ethernet(DefaultIpAddress, DefaultNetMask, DefaultGateway);
+		//ethernet_configure_interface(platform.GetDefaultMacAddress(), hostname);
+        ethernet_configure_interface(macAddress, hostname); //SD:: changed to macAddress as platform.GetDefaultMacAddress() was returning a default even though properly set in config.g
 
+#if defined(__LPC17xx)
+        //check if the Ethernet init correctly 
+        if(!init_ethernet(DefaultIpAddress, DefaultNetMask, DefaultGateway)){
+            Stop(); //Stop the Network Interface
+        }
+)
+#else
+        init_ethernet(DefaultIpAddress, DefaultNetMask, DefaultGateway);
+#endif
+        
+#if USE_MDNS==1
 		// Initialise mDNS subsystem
 		mdns_resp_init();
 		mdns_resp_add_netif(&gs_net_if, hostname, MdnsTtl);
-
-		// Initialise NetBIOS responder
+#endif
+        
+#if USE_NETBIOS==1
+        // Initialise NetBIOS responder
 		netbiosns_init();
 		netbiosns_set_name(hostname);
-
+#endif
 		initialised = true;
 	}
 
@@ -396,6 +416,7 @@ void LwipEthernetInterface::Spin(bool full)
 				usingDhcp = (ipAddress[0] == 0 && ipAddress[1] == 0 && ipAddress[2] == 0 && ipAddress[3] == 0);
 				if (usingDhcp)
 				{
+                    
 					// IP address is all zeros, so use DHCP
 					state = NetworkState::obtainingIP;
 //					debugPrintf("Link established, getting IP address\n");
@@ -448,7 +469,9 @@ void LwipEthernetInterface::Spin(bool full)
 			if (full)
 			{
 				InitSockets();
+#if USE_MDNS==1
 				RebuildMdnsServices();
+#endif
 				platform.MessageF(NetworkInfoMessage, "Ethernet running, IP address = %s\n", IP4String(ethernet_get_ipaddress()).c_str());
 				state = NetworkState::active;
 			}
@@ -501,7 +524,29 @@ void LwipEthernetInterface::Interrupt()
 void LwipEthernetInterface::Diagnostics(MessageType mtype)
 {
 	platform.Message(mtype, "- Ethernet -\n");
-	platform.MessageF(mtype, "State: %d\n", (int)state);
+	//platform.MessageF(mtype, "State: %d\n", (int)state);
+    platform.MessageF(mtype, "State: ");
+    switch(state){
+        case NetworkState::disabled:                    // Network disabled
+            platform.Message(mtype, "disabled\n");
+            break;
+        case NetworkState::enabled:                    // Network enabled but not started yet
+            platform.Message(mtype, "enabled\n");
+            break;
+        case NetworkState::establishingLink:            // starting up, waiting for link
+            platform.Message(mtype, "establishing link\n");
+            break;
+        case NetworkState::obtainingIP:                // link established, waiting for DHCP
+            platform.Message(mtype, "obtaining IP\n");
+            break;
+        case NetworkState::connected:                    // just established a connection
+            platform.Message(mtype, "connected\n");
+            break;
+        case NetworkState::active:                        // network running
+            platform.Message(mtype, "active\n");
+            break;
+
+    }
 	platform.Message(mtype, "Socket states:");
 	for (LwipSocket *s : sockets)
 	{
@@ -600,7 +645,9 @@ void LwipEthernetInterface::SetIPAddress(const uint8_t ipAddress[], const uint8_
 			}
 
 			ethernet_set_configuration(ipAddress, netmask, gateway);
+#if USE_MDNS==1
 			mdns_resp_netif_settings_changed(&gs_net_if);
+#endif
 		}
 	}
 }
@@ -609,8 +656,13 @@ void LwipEthernetInterface::UpdateHostname(const char *hostname)
 {
 	if (initialised)
 	{
+#if USE_NETBIOS==1
 		netbiosns_set_name(hostname);
+#endif
+        
+#if USE_MDNS==1
 		RebuildMdnsServices();			// This updates the mDNS hostname too
+#endif
 	}
 }
 
@@ -677,12 +729,15 @@ void LwipEthernetInterface::TerminateSockets()
 	}
 }
 
+#if USE_MDNS==1
 void GetServiceTxtEntries(struct mdns_service *service, void *txt_userdata)
 {
+
 	for (size_t i = 0; i < ARRAY_SIZE(MdnsTxtRecords); i++)
 	{
 		mdns_resp_add_service_txtitem(service, MdnsTxtRecords[i], strlen(MdnsTxtRecords[i]));
 	}
+
 }
 
 void LwipEthernetInterface::RebuildMdnsServices()
@@ -702,5 +757,6 @@ void LwipEthernetInterface::RebuildMdnsServices()
 
 	mdns_resp_netif_settings_changed(&gs_net_if);
 }
+#endif //end USE_MDNS
 
 // End

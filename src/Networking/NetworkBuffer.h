@@ -71,13 +71,18 @@ public:
 	// Count how many buffers there are in a chain
 	static unsigned int Count(NetworkBuffer*& ptr);
 
+#if defined(__LPC17xx__)
+    static const size_t bufferSize =   3 * 512; // Less than this drops uploading to SDCard from 70K to 10K.
+#else
+    
 	static const size_t bufferSize =
 #ifdef USE_3K_BUFFERS
 									 3 * 1024;
 #else
 									 2 * 1024;
-#endif
+#endif//end 3k buffers
 
+#endif
 private:
 	NetworkBuffer(NetworkBuffer *n);
 	uint8_t *Data() { return reinterpret_cast<uint8_t*>(data32); }

@@ -42,6 +42,8 @@ Network::Network(Platform& p) : platform(p), responders(nullptr), nextResponderT
 	interfaces[0] = nullptr;			// we set this up in Init()
 #elif defined(DUET_M)
 	interfaces[0] = new W5500Interface(p);
+#elif defined(__LPC17xx__)
+    interfaces[0] = new NETWORK_RAM LwipEthernetInterface(p);
 #else
 # error Unknown board
 #endif
@@ -50,6 +52,7 @@ Network::Network(Platform& p) : platform(p), responders(nullptr), nextResponderT
 // Note that Platform::Init() must be called before this to that Platform::IsDuetWiFi() returns the correct value
 void Network::Init()
 {
+    
 #if defined(DUET_NG)
 	interfaces[0] = (platform.IsDuetWiFi()) ? static_cast<NetworkInterface*>(new WiFiInterface(platform)) : static_cast<NetworkInterface*>(new W5500Interface(platform));
 #endif
@@ -57,21 +60,21 @@ void Network::Init()
 	// Create the responders
 	for (size_t i = 0; i < NumTelnetResponders; ++i)
 	{
-		responders = new TelnetResponder(responders);
+		responders = new NETWORK_RAM TelnetResponder(responders);
 	}
 	for (size_t i = 0; i < NumFtpResponders; ++i)
 	{
-		responders = new FtpResponder(responders);
+		responders = new NETWORK_RAM FtpResponder(responders);
 	}
 	for (size_t i = 0; i < NumHttpResponders; ++i)
 	{
-		responders = new HttpResponder(responders);
+		responders = new NETWORK_RAM HttpResponder(responders);
 	}
 
 	strcpy(hostname, DEFAULT_HOSTNAME);
-
+    
 	NetworkBuffer::AllocateBuffers(NetworkBufferCount);
-
+    
 	for (NetworkInterface *iface : interfaces)
 	{
 		iface->Init();
@@ -236,7 +239,7 @@ bool Network::IsWiFiInterface(unsigned int interface) const
 // Main spin loop. If 'full' is true then we are being called from the main spin loop. If false then we are being called during HSMCI idle time.
 void Network::Spin(bool full)
 {
-	// Keep the network modules running
+    // Keep the network modules running
 	for (NetworkInterface *iface : interfaces)
 	{
 		iface->Spin(full);

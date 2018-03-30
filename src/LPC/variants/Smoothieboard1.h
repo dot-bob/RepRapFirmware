@@ -55,7 +55,7 @@ const size_t MaxDriversPerAxis = 2;				// The maximum number of stepper drivers 
 const Pin ENABLE_PINS[DRIVES] =             { P0_4,  P0_10, P0_19, P0_21,  P4_29  };
 const Pin STEP_PINS[DRIVES] =               { P2_0,  P2_1,  P2_2,  P2_3,   P2_8};
 const uint8_t STEP_PIN_PORT2_POS[DRIVES] =  { 0,     1,     2,     3,      8}; //SD: Used for calculating bitmap for stepping drivers (this is position of the pins on the port)
-const uint32_t STEP_DRIVER_MASK =           0xFFFFFEF0; //SD: mask of the step pins on Port 2 used for writing to step pins in parallel (0's (Binary) indicate which bits to set)
+const uint32_t STEP_DRIVER_MASK =           0x0000010F; //SD: mask of the step pins on Port 2 used for writing to step pins in parallel 
 const Pin DIRECTION_PINS[DRIVES] =          { P0_5,  P0_11, P0_20, P0_22,  P2_13};
 
 

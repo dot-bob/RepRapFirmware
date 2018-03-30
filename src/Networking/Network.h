@@ -15,15 +15,22 @@
 
 #if defined(SAME70_TEST_BOARD)
 const size_t NumNetworkInterfaces = 2;
-#elif defined(DUET_NG) || defined(DUET_M)
+#elif defined(DUET_NG) || defined(DUET_M) || defined(__LPC17xx__)
 const size_t NumNetworkInterfaces = 1;
 #else
 # error Wrong Network.h file included
 #endif
 
+#if defined(__LPC17xx__)
+//Only 1 of each as we are tight on memory .
+const size_t NumHttpResponders = 1;        // the number of concurrent HTTP requests we can process
+const size_t NumFtpResponders = 0;        // the number of concurrent FTP sessions we support
+const size_t NumTelnetResponders = 0;    // the number of concurrent Telnet sessions we support
+#else
 const size_t NumHttpResponders = 4;		// the number of concurrent HTTP requests we can process
 const size_t NumFtpResponders = 1;		// the number of concurrent FTP sessions we support
 const size_t NumTelnetResponders = 2;	// the number of concurrent Telnet sessions we support
+#endif
 
 // Forward declarations
 class NetworkResponder;

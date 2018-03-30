@@ -444,6 +444,7 @@ void Platform::Init()
     
 #if defined(__LPC17xx__)
     mcp4451.begin();
+    Microstepping::Init(); // basic class to remember the Microstepping.
 #endif
 
 
@@ -2070,7 +2071,6 @@ void Platform::InitialiseInterrupts()
     // Set up the Ethernet interface priority here to because we have access to the priority definitions
     NVIC_SetPriority(ENET_IRQn, NvicPriorityEthernet); //enet interrupt priority
     
-    
 #else
     
     pmc_enable_periph_clk(NETWORK_TC_ID);
@@ -3373,7 +3373,12 @@ bool Platform::SetDriverMicrostepping(size_t driver, unsigned int microsteps, in
 		}
 #elif defined(__ALLIGATOR__)
 		return Microstepping::Set(driver, microsteps); // no mode in Alligator board
+#elif __LPC17xx__
+        return Microstepping::Set(driver, microsteps);
+
 #else
+        
+        
 		// Assume only x16 microstepping supported
 		return microsteps == 16;
 #endif
@@ -3416,6 +3421,11 @@ unsigned int Platform::GetDriverMicrostepping(size_t driver, int mode, bool& int
 #elif defined(__ALLIGATOR__)
 	interpolation = false;
 	return Microstepping::Read(driver); // no mode, no interpolation for Alligator
+
+#elif __LPC17xx__
+    interpolation = false;
+    return Microstepping::Read(driver); //get the value we saved
+
 #else
 	interpolation = false;
 	return 16;

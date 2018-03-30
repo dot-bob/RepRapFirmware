@@ -250,8 +250,13 @@ constexpr float DefaultMaxSpindleRpm = 10000;			// Default spindle RPM at full P
 constexpr float DefaultMaxLaserPower = 255.0;			// Power setting in M3 command for full power
 
 // File handling
-constexpr size_t MAX_FILES = 3;						// Must be large enough to handle the max number of simultaneous web requests + files being printed
+#if defined(__LPC17xx__)
+constexpr size_t MAX_FILES = 3;                        // Must be large enough to handle the max number of simultaneous web requests + files being printed
 constexpr size_t FILE_BUFFER_SIZE = 256;
+#else
+constexpr size_t MAX_FILES = 10;						// Must be large enough to handle the max number of simultaneous web requests + files being printed
+constexpr size_t FILE_BUFFER_SIZE = 256;
+#endif
 
 // Webserver stuff
 #define DEFAULT_PASSWORD		"reprap"				// Default machine password

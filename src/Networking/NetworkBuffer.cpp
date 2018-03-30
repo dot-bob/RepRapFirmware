@@ -119,7 +119,7 @@ void NetworkBuffer::Empty()
 {
 	while (number != 0)
 	{
-		freelist = new NetworkBuffer(freelist);
+		freelist = new NETWORKBUFFER_RAM NetworkBuffer(freelist);
 		--number;
 	}
 }

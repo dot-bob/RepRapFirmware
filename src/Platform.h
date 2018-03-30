@@ -1299,7 +1299,7 @@ inline OutputBuffer *Platform::GetAuxGCodeReply()
 # elif defined(__ALLIGATOR__)
 	return pinDesc.ulPin;
 # elif defined(__LPC17xx__)
-    return 1 << STEP_PIN_PORT2_POS[driver];
+    return (1<<STEP_PIN_PORT2_POS[driver]);
 # else
 #  error Unknown board
 # endif
@@ -1336,8 +1336,7 @@ inline OutputBuffer *Platform::GetAuxGCodeReply()
     //On ReArm all step pins are on Port 2
 
     //using fast GPIO registers
-    LPC_GPIO2->FIOMASK = STEP_DRIVER_MASK;
-    LPC_GPIO2->FIOPIN = driverMap;
+    LPC_GPIO2->FIOSET = driverMap;
 
 #else
 # error Unknown board
@@ -1369,8 +1368,7 @@ inline OutputBuffer *Platform::GetAuxGCodeReply()
 	PIOC->PIO_ODSR = 0;
 	PIOB->PIO_ODSR = 0;
 #elif defined(__LPC17xx__)
-    LPC_GPIO2->FIOMASK =  STEP_DRIVER_MASK;
-    LPC_GPIO2->FIOPIN = 0;
+    LPC_GPIO2->FIOCLR = STEP_DRIVER_MASK;
 
 #else
 # error Unknown board

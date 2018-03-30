@@ -4,7 +4,7 @@
 
 
 #include "lpc_mem_defs.h"
-
+#include "Microstepping.h"
 
 //NOTES:
 // Filament detector pin and Fan RPM pin must be on a spare pin on Port0 or Port2 only
@@ -20,6 +20,9 @@
 //TODO:: implement firmware update
 const size_t NumFirmwareUpdateModules = 0;
 
+#ifndef UNUSED
+#define UNUSED(x) (void)(x)
+#endif
 
 
 
@@ -29,11 +32,16 @@ const size_t NumFirmwareUpdateModules = 0;
 
 // Features definition
 #define HAS_LWIP_NETWORKING		1
+#define USE_MDNS                0 
+#define USE_NETBIOS             0
+
 #define HAS_CPU_TEMP_SENSOR		0				// enabling the CPU temperature sensor disables Due pin 13 due to bug in SAM3X
 #define HAS_HIGH_SPEED_SD		0
 #define HAS_SMART_DRIVERS		0
 #define HAS_VOLTAGE_MONITOR		0
 #define ACTIVE_LOW_HEAT_ON		0
+
+
 
 
 #define SUPPORT_INKJET		0					// set nonzero to support inkjet control
