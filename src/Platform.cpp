@@ -263,9 +263,19 @@ extern "C"
 	    reprap.GetPlatform().SoftwareReset((uint16_t)SoftwareResetReason::wdtFault, pulFaultStackAddress + 5);
 	}
 
+#if __LPC17xx__
+    extern "C" void WDT_IRQHandler(void) __attribute__((naked));
+    void WDT_IRQHandler(void)
+    {
+        
+        LPC_WDT->WDMOD &=~((uint32_t)(1<<2)); //SD::clear timout flag before resetting to prevent the Smoothie bootloader going into DFU mode
+
+#else
 	void WDT_Handler() __attribute__((naked));
 	void WDT_Handler()
-	{
+    {
+#endif
+    
 	    __asm volatile
 	    (
 	        " tst lr, #4                                                \n"		/* test bit 2 of the EXC_RETURN in LR to determine which stack was in use */
@@ -277,6 +287,7 @@ extern "C"
 	        " handler_wdt_address_const: .word wdtFaultDispatcher       \n"
 	    );
 	}
+
 
 	void otherFaultDispatcher(const uint32_t *pulFaultStackAddress)
 	{
