@@ -81,7 +81,7 @@ void MassStorage::Init()
 	if (reply.strlen() != 0)
 	{
 		delay(3000);		// Wait a few seconds so users have a chance to see this
-		reprap.GetPlatform().MessageF(UsbMessage, "%s\n", reply.Pointer());
+		reprap.GetPlatform().MessageF(UsbMessage, "%s\n", reply.c_str());
 	}
 }
 

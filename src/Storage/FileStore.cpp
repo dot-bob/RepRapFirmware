@@ -77,9 +77,9 @@ bool FileStore::Open(const char* directory, const char* fileName, OpenMode mode)
 			if (filePath[i] == '/')
 			{
 				filePath[i] = 0;
-				if (!reprap.GetPlatform().GetMassStorage()->DirectoryExists(filePath.Pointer()) && !reprap.GetPlatform().GetMassStorage()->MakeDirectory(filePath.Pointer()))
+				if (!reprap.GetPlatform().GetMassStorage()->DirectoryExists(filePath.c_str()) && !reprap.GetPlatform().GetMassStorage()->MakeDirectory(filePath.c_str()))
 				{
-					reprap.GetPlatform().MessageF(ErrorMessage, "Failed to create directory %s while trying to open file %s\n", filePath.Pointer(), location);
+					reprap.GetPlatform().MessageF(ErrorMessage, "Failed to create directory %s while trying to open file %s\n", filePath.c_str(), location);
 					return false;
 				}
 				filePath[i] = '/';

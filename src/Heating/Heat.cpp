@@ -674,7 +674,7 @@ bool Heat::WriteBedAndChamberTempSettings(FileStore *f) const
 			buf.printf("M141 P%u S%.1f\n", index, (double)GetActiveTemperature(chamberHeater));
 		}
 	}
-	return (buf.Length() == 0) || f->Write(buf.Pointer());
+	return (buf.strlen() == 0) || f->Write(buf.c_str());
 }
 
 // End
