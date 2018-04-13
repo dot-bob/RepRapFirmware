@@ -329,8 +329,8 @@ bool HeightMap::LoadFromFile(FileStore *f, const StringRef& r)
 				}
 				else
 				{
-					char* np = nullptr;
-					const float f = strtof(p, &np);
+					const char* np = nullptr;
+					const float f = SafeStrtof(p, &np);
 					if (np == p)
 					{
 						r.catf("number expected at line %" PRIu32 " column %d", row + 3, (p - buffer) + 1);

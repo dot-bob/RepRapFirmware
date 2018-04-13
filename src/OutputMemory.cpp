@@ -92,7 +92,7 @@ size_t OutputBuffer::printf(const char *fmt, ...)
 	char formatBuffer[FORMAT_STRING_LENGTH];
 	va_list vargs;
 	va_start(vargs, fmt);
-	vsnprintf(formatBuffer, ARRAY_SIZE(formatBuffer), fmt, vargs);
+	SafeVsnprintf(formatBuffer, ARRAY_SIZE(formatBuffer), fmt, vargs);
 	va_end(vargs);
 
 	return copy(formatBuffer);
@@ -101,7 +101,7 @@ size_t OutputBuffer::printf(const char *fmt, ...)
 size_t OutputBuffer::vprintf(const char *fmt, va_list vargs)
 {
 	char formatBuffer[FORMAT_STRING_LENGTH];
-	vsnprintf(formatBuffer, ARRAY_SIZE(formatBuffer), fmt, vargs);
+	SafeVsnprintf(formatBuffer, ARRAY_SIZE(formatBuffer), fmt, vargs);
 
 	return cat(formatBuffer);
 }
@@ -111,7 +111,7 @@ size_t OutputBuffer::catf(const char *fmt, ...)
 	char formatBuffer[FORMAT_STRING_LENGTH];
 	va_list vargs;
 	va_start(vargs, fmt);
-	vsnprintf(formatBuffer, ARRAY_SIZE(formatBuffer), fmt, vargs);
+	SafeVsnprintf(formatBuffer, ARRAY_SIZE(formatBuffer), fmt, vargs);
 	va_end(vargs);
 
 	formatBuffer[ARRAY_UPB(formatBuffer)] = 0;

@@ -851,7 +851,7 @@ bool PrintMonitor::FindFirstLayerHeight(const char* buf, size_t len, float& heig
 					if (buf[i] == 'Z')
 					{
 						//debugPrintf("Found at offset %u text: %.100s\n", i, &buf[i + 1]);
-						float flHeight = strtof(&buf[i + 1], nullptr);
+						float flHeight = SafeStrtof(&buf[i + 1], nullptr);
 						if ((height == 0.0 || flHeight < height) && (flHeight <= platform.GetNozzleDiameter() * 3.0))
 						{
 							height = flHeight;				// Only report first Z height if it's somewhat reasonable
@@ -944,7 +944,7 @@ bool PrintMonitor::FindHeight(const char* buf, size_t len, float& height) const
 							}
 							else
 							{
-								height = strtof(zpos, nullptr);
+								height = SafeStrtof(zpos, nullptr);
 								foundHeight = true;
 							}
 							break;		// carry on looking for a later G1 Z command
@@ -969,7 +969,7 @@ bool PrintMonitor::FindHeight(const char* buf, size_t len, float& height) const
 			static const char kisslicerHeightString[] = " END_LAYER_OBJECT z=";
 			if (len > 31 && StringStartsWith(buf, kisslicerHeightString))
 			{
-				height = strtof(buf + sizeof(kisslicerHeightString)/sizeof(char) - 1, nullptr);
+				height = SafeStrtof(buf + sizeof(kisslicerHeightString)/sizeof(char) - 1, nullptr);
 				return true;
 			}
 		}
@@ -1011,8 +1011,8 @@ bool PrintMonitor::FindLayerHeight(const char *buf, size_t len, float& layerHeig
 					{
 						++pos;
 					}
-					char *tailPtr;
-					const float val = strtof(pos, &tailPtr);
+					const char *tailPtr;
+					const float val = SafeStrtof(pos, &tailPtr);
 					if (tailPtr != pos)								// if we found and converted a number
 					{
 						layerHeight = val;
@@ -1096,8 +1096,8 @@ unsigned int PrintMonitor::FindFilamentUsed(const char* buf, size_t len, float *
 		}
 		while (isDigit(*p))
 		{
-			char* q;
-			filamentUsed[filamentsFound] = strtof(p, &q);
+			const char* q;
+			filamentUsed[filamentsFound] = SafeStrtof(p, &q);
 			p = q;
 			if (*p == 'm')
 			{
@@ -1125,8 +1125,8 @@ unsigned int PrintMonitor::FindFilamentUsed(const char* buf, size_t len, float *
 	while (filamentsFound < maxFilaments &&	(p = strstr(p, filamentUsedStr2)) != nullptr)
 	{
 		p += strlen(filamentUsedStr2);
-		char *q;
-		unsigned int num = strtoul(p, &q, 10);
+		const char *q;
+		unsigned int num = SafeStrtoul(p, &q, 10);
 		if (q != p && num < maxFilaments)
 		{
 			p = q;
@@ -1136,7 +1136,7 @@ unsigned int PrintMonitor::FindFilamentUsed(const char* buf, size_t len, float *
 			}
 			if (isDigit(*p))
 			{
-				filamentUsed[filamentsFound] = strtof(p, &q);
+				filamentUsed[filamentsFound] = SafeStrtof(p, &q);
 				++filamentsFound;
 			}
 		}
@@ -1156,7 +1156,7 @@ unsigned int PrintMonitor::FindFilamentUsed(const char* buf, size_t len, float *
 			}
 			if (isDigit(*p))
 			{
-				filamentUsed[filamentsFound] = strtof(p, nullptr); // S3D reports filament usage in mm, no conversion needed
+				filamentUsed[filamentsFound] = SafeStrtof(p, nullptr); // S3D reports filament usage in mm, no conversion needed
 				++filamentsFound;
 			}
 		}
@@ -1181,7 +1181,7 @@ unsigned int PrintMonitor::FindFilamentUsed(const char* buf, size_t len, float *
 
 			if (isDigit(*p))
 			{
-				filamentUsed[filamentsFound] = strtof(p, nullptr);
+				filamentUsed[filamentsFound] = SafeStrtof(p, nullptr);
 				++filamentsFound;
 			}
 		}
@@ -1194,7 +1194,7 @@ unsigned int PrintMonitor::FindFilamentUsed(const char* buf, size_t len, float *
 		p = strstr(buf, filamentVolumeStr);
 		if (p != nullptr)
 		{
-			const float filamentCMM = strtof(p + strlen(filamentVolumeStr), nullptr) * 1000.0;
+			const float filamentCMM = SafeStrtof(p + strlen(filamentVolumeStr), nullptr) * 1000.0;
 			filamentUsed[filamentsFound++] = filamentCMM / (Pi * fsquare(platform.GetFilamentWidth() / 2.0));
 		}
 	}
