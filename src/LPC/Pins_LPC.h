@@ -47,12 +47,7 @@ const size_t NumFirmwareUpdateModules = 0;
 #define ENABLE_FTP    0
 #define NO_PANELDUE                  1
 
-//LCD Support with No Networking 
-#if defined(LPC_NETWORKING) || defined(ESP_NETWORKING)
-    #define SUPPORT_12864_LCD       0
-#else
-    #define SUPPORT_12864_LCD       1
-#endif
+#define SUPPORT_12864_LCD       1
 
 constexpr size_t NumExtraHeaterProtections = 4;
 constexpr size_t NumTachos = 0;
