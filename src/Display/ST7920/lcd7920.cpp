@@ -9,7 +9,7 @@
 #include "Tasks.h"
 
 #ifdef __LPC17xx__
-const uint32_t SpiClockFrequency = 60000;            //SD: 2MHz doest work on my RepRapDiscount Full Graphic LCD (minimum clock cycle time for ST7920 is 400ns @ Vdd=4.5V, min. clock width 200ns high and 20ns low)
+const uint32_t SpiClockFrequency = 1000000;            //SD: 2MHz doest work on my RepRapDiscount Full Graphic LCD (minimum clock cycle time for ST7920 is 400ns @ Vdd=4.5V, min. clock width 200ns high and 20ns low)
 #else
 const uint32_t SpiClockFrequency = 2000000;			// 2.0MHz (minimum clock cycle time for ST7920 is 400ns @ Vdd=4.5V, min. clock width 200ns high and 20ns low)
 #endif
