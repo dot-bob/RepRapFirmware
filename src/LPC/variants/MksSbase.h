@@ -20,9 +20,7 @@
 
 
 //Firmware for networking version only. Non-networking firmware will need to be manually copied to Sdcard
-//#define FIRMWARE_FILE "firmware-MKSSBASE-NETWORK.bin"
-#define FIRMWARE_FILE "firmware.bin" // makefile is currently hardcoded to output firmware.bin what is stored in FIRMWARE_FILE
-
+#define FIRMWARE_FILE "firmware.bin"
 
 #define MKSSBASE
 
