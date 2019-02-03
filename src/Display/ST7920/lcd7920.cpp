@@ -9,7 +9,7 @@
 #include "Tasks.h"
 
 #ifdef __LPC17xx__
-const uint32_t SpiClockFrequency = 1000000;            //SD: 2MHz doest work on my RepRapDiscount Full Graphic LCD (minimum clock cycle time for ST7920 is 400ns @ Vdd=4.5V, min. clock width 200ns high and 20ns low)
+const uint32_t SpiClockFrequency = 60000;            //SD: 2MHz doest work on my RepRapDiscount Full Graphic LCD (minimum clock cycle time for ST7920 is 400ns @ Vdd=4.5V, min. clock width 200ns high and 20ns low)
 #else
 const uint32_t SpiClockFrequency = 2000000;			// 2.0MHz (minimum clock cycle time for ST7920 is 400ns @ Vdd=4.5V, min. clock width 200ns high and 20ns low)
 #endif
@@ -31,7 +31,7 @@ const uint8_t LcdSetGdramAddress = 0x80;
 
 const unsigned int LcdCommandDelayMicros = 72 - 8; // 72us required, less 7us time to send the command @ 2.0MHz
 #if __LPC17xx__
-const unsigned int LcdDataDelayMicros = 4+3;            // delay between sending data bytes //SD:: RRD full graphic requires extra delay
+const unsigned int LcdDataDelayMicros = 4;            // delay between sending data bytes //SD:: RRD full graphic requires extra delay
 #else
 const unsigned int LcdDataDelayMicros = 4;			// delay between sending data bytes
 #endif
