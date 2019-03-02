@@ -22,7 +22,7 @@ const size_t NumFirmwareUpdateModules = 0;
 #define LPC_ELECTRONICS_STRING "LPC176x"
 #define LPC_BOARD_STRING "LPC176x"
 
-#define FIRMWARE_FILE "firmware-.bin"
+#define FIRMWARE_FILE "firmware.bin"
 
 // Features definition
 #define SUPPORT_OBJECT_MODEL         1
@@ -44,13 +44,12 @@ const size_t NumFirmwareUpdateModules = 0;
 #define SUPPORT_FT                   0
 #define NO_PANELDUE                  1
 
+#define SUPPORT_12864_LCD            1
 
 #if defined(LPC_NETWORKING)
     #define HAS_RTOSPLUSTCP_NETWORKING   1
-    #define SUPPORT_12864_LCD            1
 #else
     #define HAS_RTOSPLUSTCP_NETWORKING   0
-    #define SUPPORT_12864_LCD            1
 #endif
 
 constexpr size_t NumExtraHeaterProtections = 4;
